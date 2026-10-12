@@ -1,0 +1,91 @@
+{
+  "commit": "2b75f3ad12b420c9504ef05df8d2564a28f8500e",
+  "icons": {
+    "back": {
+      "sha256": "4eb160d5ae781107c674481ac081962e6bce6281a646129e6c3f960b9dd5dac6",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/regular/arrow-counter-clockwise.svg",
+      "variants": {
+        "back-dark.svg": "353b8ae8db3d68438716eeb9b19449b10dcf41087b94ccb3473826fad2d82adf",
+        "back-light.svg": "c843d02c7aa80001503b51612f6cc7598a1a690b296ef1aea34fdf5a3ebc85b4"
+      }
+    },
+    "chapters": {
+      "sha256": "5eb0c8daceb5a6ffa004118720ea712a3eb8b7d2b6ab5bae750c3efca9d35450",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/regular/book-open-text.svg",
+      "variants": {
+        "chapters-dark.svg": "b360ef36bf54615d30e4ee57d3777bdd03b3ee1404282f8036bcb1099ddaee25",
+        "chapters-light.svg": "c0cd0064d680801303b543f64179c9dcf9c53a056aef32aac6bf7835d46c5e6e"
+      }
+    },
+    "forward": {
+      "sha256": "4a78a777b692cb74826e3071ae7049cc0d3927e68a7b8272e7251b1760cd771f",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/regular/arrow-clockwise.svg",
+      "variants": {
+        "forward-dark.svg": "30629b7b89b049ea423b481d74c3c78127ce1a353d6906329ab65c5ea2e5ecf1",
+        "forward-light.svg": "903ef43d8fdf537d1fb691141f5099daa6f7468f7e9a2cae88fb5f661773e7bc"
+      }
+    },
+    "next": {
+      "sha256": "2f13f5cbeab47627d30782e7942001e7f80f7da993df053d3be2b8c6cb737ae2",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/skip-forward-fill.svg",
+      "variants": {
+        "next-dark.svg": "a71a844cbe585d3736aef4f43c3881df587a9061904eb9fd0b5cb3e188895a98",
+        "next-light.svg": "29bfe5d8ce58855c1896c42eda3b184ad16229afe5201fe31a27c2b792eea67f"
+      }
+    },
+    "pause": {
+      "sha256": "156d3cdfa5cea803caec50b35f49bc635070c8bd84e7fe78df94b025017ccee1",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/pause-fill.svg",
+      "variants": {
+        "pause-dark.svg": "1214064902a2db08398490a76459c42945d038d07305664e122c6717e862989f",
+        "pause-light.svg": "c8af9ede8342cdde59e5fb34de2229bc49db0c7128b848db2a2891ed00afa708"
+      }
+    },
+    "play": {
+      "sha256": "6d2a75bc5700a68dec50516ebae121c307807e4e6fcca5c863e5b4af006df880",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/play-fill.svg",
+      "variants": {
+        "play-dark.svg": "141aeac35cc638832036a715fafdadd25dd99f3d758b82b5b72d30994b785eb0",
+        "play-light.svg": "9056e53009a541fced2cdc53259fc40f8594aee8a360e08a8ac936d911624a62"
+      }
+    },
+    "previous": {
+      "sha256": "65a2d664196ad28fff7288ed7a1870f508fdb922334ad1a49c54586dae7592d7",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/skip-back-fill.svg",
+      "variants": {
+        "previous-dark.svg": "6f13cf4aa30e7a01c2285fe3f9ef84ce3d23079702bb98cc979ea9128d059745",
+        "previous-light.svg": "60f56e8c6ed64d85aaeacf752185fc6bc99857549fe32f7f57e8500a563b23fe"
+      }
+    },
+    "stop": {
+      "sha256": "7d9cb9f0bc3363ba8846cf915bc8a84e824804025defaba58eb9df8c21105bb1",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/stop-fill.svg",
+      "variants": {
+        "stop-dark.svg": "39e97b757306784d0aa9a8be442df784e0a681b5463929e731216e1bcba80380",
+        "stop-light.svg": "1d171ef6fdb2f05e8f9706cdb728e6eaa7516c914c9cc7cc1f3a1e369efce45f"
+      }
+    },
+    "stopAfter": {
+      "sha256": "3ba424dc9e1a09cf923c992807148abcfb84af6981cecc99e4474b58205e32c9",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/eject-fill.svg",
+      "variants": {
+        "stopAfter-dark.svg": "0ad598747c3d5196f5cf84cb3355ecf897f79790d710bb12b1368c8d15b2ebf2",
+        "stopAfter-light.svg": "d3c8568be5690d8564421721b3addaf8496acf79e4e5ac1f61509e0a2e9cc79c"
+      }
+    },
+    "volume": {
+      "sha256": "c266c407915382db3866570f816934b804c1b84bd47d971fad0e95ac5107dd6b",
+      "source": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/speaker-high-fill.svg",
+      "variants": {
+        "volume-dark.svg": "08cb2229f3e9c0c09eb77adb5e3a8bee13f65809e4d3975d7d07654a63383125",
+        "volume-light.svg": "dd159c93c6a2f261b59912dc4a1ce5211d62e843a024e04bc222ffbf32894876"
+      }
+    }
+  },
+  "license": "MIT",
+  "license_sha256": "b5b1f1da112d18ea2147decfd48ddc1bf2b5aeb6c265381579340e95b15a2bb2",
+  "modifications": "Light and dark variants substitute currentColor. Ten-second amounts are overlaid in QML.",
+  "package": "@phosphor-icons/core",
+  "project": "Phosphor Icons",
+  "version": "2.1.1"
+}

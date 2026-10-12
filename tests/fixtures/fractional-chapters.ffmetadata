@@ -1,0 +1,13 @@
+;FFMETADATA1
+title=Fractional chapter boundary fixture
+artist=qt-m4b-player tests
+[CHAPTER]
+TIMEBASE=1/1000
+START=0
+END=3621
+title=First chapter
+[CHAPTER]
+TIMEBASE=1/1000
+START=3621
+END=6000
+title=Second chapter

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=qt-m4b-player
+Comment=Local M4B audiobook player
+Exec=qt-m4b-player %f
+Terminal=false
+Categories=Audio;AudioVideo;
+MimeType=audio/mp4;audio/x-m4b;

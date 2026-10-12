@@ -1,0 +1,565 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Dialogs
+import QtQuick.Layouts
+import AudiobookPlayer
+
+ApplicationWindow {
+    id: window
+    required property PlayerController player
+    required property AppPreferences preferences
+    readonly property bool wideControls: width >= 740
+    readonly property var playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+    palette.window: "#24343e"
+    palette.windowText: "#edf5f6"
+    palette.base: "#17232b"
+    palette.text: "#edf5f6"
+    palette.button: "#344954"
+    palette.buttonText: "#edf5f6"
+    palette.highlight: "#526a76"
+    palette.highlightedText: "#ffffff"
+    palette.light: "#40515c"
+    palette.midlight: "#52616c"
+    palette.mid: "#40515c"
+    palette.dark: "#121b22"
+    palette.disabled.windowText: "#7e858b"
+    width: 520
+    height: 800
+    minimumWidth: 390
+    minimumHeight: 600
+    // C++ restores the saved size/state before showing the window.
+    visible: false
+    title: window.player.loaded ? window.player.title + (window.player.author ? " — " + window.player.author : "") : "qt-m4b-player"
+    color: "#17232b"
+
+    function formatTime(seconds: real): string {
+        let value = Math.max(0, Math.floor(seconds))
+        let hours = Math.floor(value / 3600)
+        let minutes = Math.floor((value % 3600) / 60)
+        let secs = value % 60
+        return (hours ? hours + ":" + String(minutes).padStart(2, "0") : minutes) + ":" + String(secs).padStart(2, "0")
+    }
+
+    FileDialog {
+        id: fileDialog
+        title: "Open audiobook"
+        nameFilters: ["Audiobooks (*.m4b *.m4a *.mp4)", "All files (*)"]
+        onAccepted: window.player.openBook(selectedFile)
+    }
+    Action {
+        id: openAction
+        text: "&Open Audiobook…"
+        shortcut: StandardKey.Open
+        onTriggered: fileDialog.open()
+    }
+    Action {
+        id: playAction
+        text: window.player.playing ? "&Pause" : "&Play"
+        shortcut: "Space"
+        enabled: window.player.loaded
+        onTriggered: window.player.togglePlayback()
+    }
+    Action {
+        id: stopAction
+        text: "&Stop and Return to Chapter Start"
+        shortcut: "Ctrl+S"
+        enabled: window.player.loaded
+        onTriggered: window.player.stop()
+    }
+    Action {
+        id: previousAction
+        text: "&Previous Chapter"
+        shortcut: "Ctrl+Left"
+        enabled: window.player.loaded && window.player.currentChapter > 0
+        onTriggered: window.player.navigateChapter(-1)
+    }
+    Action {
+        id: nextAction
+        text: "&Next Chapter"
+        shortcut: "Ctrl+Right"
+        enabled: window.player.loaded && window.player.currentChapter + 1 < window.player.chapters.length
+        onTriggered: window.player.navigateChapter(1)
+    }
+    Action {
+        id: backAction
+        text: "&Back 10 Seconds"
+        shortcut: "Left"
+        enabled: window.player.loaded
+        onTriggered: window.player.skip(-10)
+    }
+    Action {
+        id: forwardAction
+        text: "&Forward 10 Seconds"
+        shortcut: "Right"
+        enabled: window.player.loaded
+        onTriggered: window.player.skip(10)
+    }
+    Action {
+        id: chaptersAction
+        text: "&Chapters…"
+        shortcut: "Ctrl+J"
+        enabled: window.player.chapters.length > 0
+        onTriggered: chapterSheet.open()
+    }
+    Action {
+        id: stopAfterAction
+        text: "Stop &After Chapter"
+        enabled: window.player.loaded
+        checkable: true
+        checked: window.player.stopAfterChapter
+        onTriggered: window.player.setStopAfterChapter(checked)
+    }
+    Action {
+        id: captionsAction
+        text: window.player.indexingCaptions ? "&Captions (indexing…)" : "&Captions"
+        shortcut: "Ctrl+Shift+C"
+        enabled: window.player.captionsAvailable
+        checkable: true
+        checked: window.player.captionsEnabled
+        onTriggered: window.player.setCaptions(checked)
+    }
+    Action {
+        id: volumeAction
+        text: "&Volume…"
+        onTriggered: volumePopup.open()
+    }
+    Action {
+        id: fillCoverAction
+        text: "&Fill Cover Background"
+        checkable: true
+        checked: window.preferences.fillCover
+        onTriggered: window.preferences.fillCover = checked
+    }
+    Action {
+        id: appearanceAction
+        text: "&Appearance…"
+        shortcut: "Ctrl+,"
+        onTriggered: settings.open()
+    }
+    Action {
+        id: fullScreenAction
+        text: "&Full Screen"
+        shortcut: "F11"
+        checkable: true
+        checked: window.visibility === Window.FullScreen
+        onTriggered: {
+            if (checked) window.showFullScreen()
+            else window.showNormal()
+        }
+    }
+
+    menuBar: MenuBar {
+        background: Rectangle { color: "#19242c" }
+        Menu {
+            title: "&File"
+            width: Math.min(window.width - 16, 320)
+            MenuCommand { action: openAction; keyHint: "Ctrl+O" }
+            Menu {
+                id: recentMenu
+                title: "Open &Recent"
+                width: Math.min(window.width - 16, 420)
+                MenuItem { text: "No recent books"; enabled: false; visible: window.player.recentBooks.length === 0; height: visible ? implicitHeight : 0 }
+                Instantiator {
+                    model: window.player.recentBooks
+                    delegate: MenuItem {
+                        required property var modelData
+                        text: modelData.title.replace(/&/g, "&&")
+                        onTriggered: window.player.openLocalPath(modelData.path)
+                    }
+                    onObjectAdded: (index, object) => recentMenu.insertItem(index, object)
+                    onObjectRemoved: (index, object) => recentMenu.removeItem(object)
+                }
+            }
+            MenuSeparator {}
+            MenuCommand { action: appearanceAction }
+            MenuSeparator {}
+            MenuCommand {
+                keyHint: "Ctrl+Q"
+                action: Action {
+                    text: "&Quit"
+                    shortcut: StandardKey.Quit
+                    onTriggered: window.close()
+                }
+            }
+        }
+        Menu {
+            title: "&Playback"
+            width: Math.min(window.width - 16, 360)
+            MenuCommand { action: playAction }
+            MenuCommand { action: stopAction }
+            MenuSeparator {}
+            MenuCommand { action: previousAction }
+            MenuCommand { action: nextAction }
+            MenuCommand { action: chaptersAction }
+            MenuSeparator {}
+            MenuCommand { action: backAction }
+            MenuCommand { action: forwardAction }
+            MenuSeparator {}
+            Menu {
+                title: "Playback &Speed"
+                enabled: window.player.loaded
+                Repeater {
+                    model: window.playbackRates
+                    MenuItem {
+                        required property real modelData
+                        text: modelData + "×"
+                        checkable: true
+                        checked: Math.abs(window.player.speed - modelData) < 0.001
+                        onTriggered: window.player.setSpeed(modelData)
+                    }
+                }
+            }
+            MenuCommand { action: stopAfterAction }
+            MenuSeparator {}
+            MenuCommand { action: volumeAction }
+            MenuCommand {
+                action: Action {
+                    text: "&Increase Volume"
+                    shortcut: "Ctrl+Up"
+                    onTriggered: window.player.setVolume(Math.min(100, window.player.volume + 5))
+                }
+            }
+            MenuCommand {
+                action: Action {
+                    text: "&Decrease Volume"
+                    shortcut: "Ctrl+Down"
+                    onTriggered: window.player.setVolume(Math.max(0, window.player.volume - 5))
+                }
+            }
+        }
+        Menu {
+            title: "&View"
+            width: Math.min(window.width - 16, 300)
+            MenuCommand { action: captionsAction }
+            Menu {
+                id: captionSizeMenu
+                title: "Caption &Text Size"
+                Repeater {
+                    model: [18, 22, 26, 30, 34, 38, 42]
+                    MenuItem {
+                        required property int modelData
+                        text: modelData + " px"
+                        checkable: true
+                        checked: window.preferences.captionSize === modelData
+                        onTriggered: window.preferences.captionSize = modelData
+                    }
+                }
+            }
+            MenuCommand { action: fillCoverAction }
+            MenuCommand { action: appearanceAction }
+            MenuSeparator {}
+            MenuCommand { action: fullScreenAction }
+        }
+        Menu {
+            title: "&Help"
+            width: Math.min(window.width - 16, 260)
+            MenuCommand {
+                action: Action {
+                    text: "Player &Help"
+                    shortcut: "F1"
+                    onTriggered: helpDialog.open()
+                }
+            }
+            MenuItem { text: "&About qt-m4b-player"; onTriggered: aboutDialog.open() }
+        }
+    }
+
+    CoverArtwork {
+        id: artwork
+        anchors.fill: parent
+        source: window.player.coverUrl
+        fill: window.preferences.fillCover
+        fittedHeight: panels.y + controlsPanel.y
+        playbackEnabled: window.player.loaded
+        onClicked: window.player.togglePlayback()
+    }
+    Column {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        visible: !window.player.loaded
+        width: parent.width - 64
+        spacing: 16
+        Label {
+            width: parent.width
+            text: window.player.fileUrl.toString() ? "Opening audiobook…" : "Your next chapter"
+            color: "#edf5f6"
+            font.pixelSize: 28
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+        }
+        Label {
+            width: parent.width
+            text: "Open an M4B file to listen and read its embedded captions."
+            color: "#b4c6cd"
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+        }
+    }
+
+    Column {
+        id: panels
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 16
+        spacing: 12
+
+        Rectangle {
+            width: parent.width
+            visible: window.player.error.length > 0
+            height: visible ? errorText.implicitHeight + 32 : 0
+            radius: 12
+            color: "#6c3038"
+            Label {
+                id: errorText
+                anchors.left: parent.left
+                anchors.right: dismiss.left
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 12
+                text: window.player.error
+                color: "white"
+                wrapMode: Text.Wrap
+            }
+            ToolButton { id: dismiss; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "×"; onClicked: window.player.clearError() }
+        }
+        Rectangle {
+            id: captionBubble
+            width: parent.width
+            visible: window.player.captionText.length > 0
+            height: visible ? Math.min(caption.implicitHeight + 36, window.contentItem.height * 0.43) : 0
+            radius: 18
+            color: "#000000"
+            Item {
+                id: captionViewport
+                anchors.fill: parent
+                anchors.margins: 18
+                clip: true
+                Text {
+                    id: caption
+                    width: parent.width
+                    y: -Math.max(0, implicitHeight - captionViewport.height) * window.player.captionScroll
+                    text: window.player.captionText
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    horizontalAlignment: Text.AlignHCenter
+                    color: "#ffffff"
+                    font.pixelSize: window.preferences.captionSize
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                }
+            }
+            MouseArea { anchors.fill: parent; onClicked: window.player.togglePlayback() }
+        }
+        Rectangle {
+            id: controlsPanel
+            width: parent.width
+            height: controls.implicitHeight + 32
+            radius: 20
+            color: "#dc303034"
+            ColumnLayout {
+                id: controls
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 16
+                spacing: 8
+                ProgressHeader {
+                    id: progressHeader
+                    Layout.fillWidth: true
+                    chapterText: window.player.currentChapter >= 0 ? window.player.chapters[window.player.currentChapter].title : "Whole book"
+                    positionText: window.formatTime(window.player.position - window.player.chapterStart) + " of " + window.formatTime(window.player.chapterEnd - window.player.chapterStart)
+                    readonly property real remaining: Math.max(0, window.player.duration - window.player.position)
+                    remainingText: Math.floor(remaining / 3600) + "h " + Math.floor((remaining % 3600) / 60) + "m remaining ("
+                        + (window.player.duration > 0 ? Math.ceil(remaining / window.player.duration * 100) : 0) + "%)"
+                }
+                Slider {
+                    id: progress
+                    property real capturedStart: 0
+                    property real capturedEnd: 0
+                    property bool wasPlaying: false
+                    Layout.fillWidth: true
+                    from: pressed ? capturedStart : window.player.chapterStart
+                    to: Math.max(from + 0.001, pressed ? capturedEnd : window.player.chapterEnd)
+                    value: window.player.position
+                    enabled: window.player.loaded
+                    Accessible.name: "Chapter progress"
+                    onPressedChanged: {
+                        if (pressed) {
+                            capturedStart = window.player.chapterStart
+                            capturedEnd = window.player.chapterEnd
+                            wasPlaying = window.player.playing
+                            if (wasPlaying) window.player.togglePlayback()
+                        } else {
+                            window.player.seek(Math.min(value, capturedEnd - 0.000001))
+                            if (wasPlaying) window.player.togglePlayback()
+                        }
+                    }
+                    onMoved: if (!pressed) window.player.seek(value)
+                    background: Rectangle {
+                        x: progress.leftPadding
+                        y: progress.topPadding + progress.availableHeight / 2 - height / 2
+                        width: progress.availableWidth
+                        height: 4
+                        radius: 2
+                        color: "#5b5b61"
+                        Rectangle {
+                            width: progress.visualPosition * parent.width
+                            height: parent.height
+                            radius: parent.radius
+                            color: "#287be9"
+                        }
+                    }
+                    handle: Rectangle {
+                        x: progress.leftPadding + progress.visualPosition * (progress.availableWidth - width)
+                        y: progress.topPadding + progress.availableHeight / 2 - height / 2
+                        implicitWidth: 18
+                        implicitHeight: 18
+                        radius: 9
+                        color: progress.pressed ? "#dedee3" : "#a2a2a9"
+                        border.width: progress.activeFocus ? 2 : 0
+                        border.color: "#edf5f6"
+                    }
+                }
+                GridLayout {
+                    columns: window.wideControls ? 2 : 1
+                    Layout.alignment: Qt.AlignHCenter
+                    columnSpacing: 12
+                    rowSpacing: 6
+                    RowLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 4
+                        TransportButton { action: previousAction; iconName: "previous"; description: "Previous chapter" }
+                        TransportButton { action: backAction; iconName: "back"; description: "Back ten seconds" }
+                        TransportButton {
+                            id: playButton
+                            action: playAction
+                            iconName: window.player.playing ? "pause" : "play"
+                            description: window.player.playing ? "Pause" : "Play"
+                            implicitWidth: 56
+                            implicitHeight: 56
+                            background: Rectangle {
+                                radius: 28
+                                color: playButton.down ? "#77777f" : playButton.hovered ? "#67676f" : "#56565e"
+                                border.width: playButton.activeFocus ? 2 : 0
+                                border.color: "#edf5f6"
+                            }
+                        }
+                        TransportButton { action: forwardAction; iconName: "forward"; description: "Forward ten seconds" }
+                        TransportButton { action: nextAction; iconName: "next"; description: "Next chapter" }
+                        TransportButton { action: stopAction; iconName: "stop"; description: "Stop at chapter start" }
+                    }
+                    RowLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 4
+                        TransportButton { action: chaptersAction; iconName: "chapters"; description: "Chapters" }
+                        TransportButton { action: stopAfterAction; iconName: "stopAfter"; description: "Stop after chapter" }
+                        TransportButton { action: captionsAction; text: "CC"; description: window.player.indexingCaptions ? "Indexing captions" : "Embedded captions"; font.pixelSize: 17; font.bold: true }
+                        TransportButton { text: window.player.speed + "×"; description: "Playback speed"; enabled: window.player.loaded; onClicked: speedMenu.open() }
+                        TransportButton { action: volumeAction; iconName: "volume"; description: "Volume" }
+                    }
+                }
+            }
+        }
+    }
+
+    Menu {
+        id: speedMenu
+        x: (window.width - width) / 2
+        y: window.contentItem.height - height - 100
+        Repeater {
+            model: window.playbackRates
+            MenuItem {
+                required property real modelData
+                text: modelData + "×"
+                checkable: true
+                checked: Math.abs(window.player.speed - modelData) < 0.001
+                onTriggered: window.player.setSpeed(modelData)
+            }
+        }
+    }
+    Popup {
+        id: volumePopup
+        anchors.centerIn: Overlay.overlay
+        width: 300
+        modal: true
+        focus: true
+        ColumnLayout {
+            anchors.fill: parent
+            Label { text: "Volume" }
+            Slider { Layout.fillWidth: true; from: 0; to: 100; value: window.player.volume; Accessible.name: "Volume"; onMoved: window.player.setVolume(value) }
+        }
+    }
+    Popup {
+        id: chapterSheet
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(window.width - 32, 480)
+        height: Math.min(window.height - 120, 500)
+        modal: true
+        focus: true
+        ColumnLayout {
+            anchors.fill: parent
+            Label { text: "Chapters"; font.pixelSize: 22 }
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                model: window.player.chapters
+                ScrollBar.vertical: ScrollBar {}
+                delegate: ItemDelegate {
+                    required property var modelData
+                    required property int index
+                    width: ListView.view.width
+                    text: (index === window.player.currentChapter ? "▶  " : "") + modelData.title
+                    highlighted: index === window.player.currentChapter
+                    onClicked: { window.player.selectChapter(index); chapterSheet.close() }
+                }
+            }
+            Button { text: "Close"; onClicked: chapterSheet.close() }
+        }
+    }
+    Popup {
+        id: settings
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(window.width - 32, 360)
+        modal: true
+        focus: true
+        ColumnLayout {
+            anchors.fill: parent
+            Label { text: "Appearance"; font.pixelSize: 22 }
+            CheckBox { action: fillCoverAction; text: "Fill cover background" }
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: "In Fill mode, drag the cover vertically to adjust its crop." }
+            Label { text: "Caption size: " + window.preferences.captionSize }
+            Slider {
+                id: captionSizeSlider
+                Layout.fillWidth: true
+                from: 18
+                to: 42
+                stepSize: 1
+                value: window.preferences.captionSize
+                Accessible.name: "Caption text size"
+                onMoved: window.preferences.captionSize = value
+            }
+            Button { text: "Close"; onClicked: settings.close() }
+        }
+    }
+    InfoPopup {
+        id: helpDialog
+        title: "Player Help"
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(window.width - 32, 440)
+        message: "Open a book with File → Open Audiobook or Open Recent. Books open paused and remember your position.\n\n"
+            + "Space: Play / pause\nLeft / Right: Back / forward 10 seconds\nCtrl+Left / Right: Previous / next chapter\nCtrl+J: Chapters\nCtrl+S: Stop and return to chapter start\nCtrl+Up / Down: Volume + / − 5%\nCtrl+Shift+C: Toggle captions\nCtrl+,: Appearance\nF11: Full screen\n\n"
+            + "Use Playback for speed and Stop After Chapter. Enable embedded captions in View once indexing finishes. In Fill mode, drag vertically on the cover to reframe it."
+    }
+    InfoPopup {
+        id: aboutDialog
+        title: "About qt-m4b-player"
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(window.width - 32, 360)
+        message: "qt-m4b-player " + Qt.application.version
+            + "\n\nAn audiobook player with chapters, cover art, and embedded captions."
+            + "\n\nBuilt with Qt, libmpv, FFmpeg, and SQLite."
+            + "\n\nIcons: © 2023 Phosphor Icons (MIT license)."
+    }
+}
