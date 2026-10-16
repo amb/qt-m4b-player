@@ -7,14 +7,17 @@ MpvEngine::MpvEngine(bool silent, QObject *parent) : QObject(parent), m_handle(m
 {
     if (!m_handle)
         throw std::runtime_error("Cannot create libmpv player");
-    const auto option = [this](const char *name, const char *value) {
+    const auto option = [this](const char *name, const char *value, bool required = true) {
         const int status = mpv_set_option_string(m_handle, name, value);
-        if (status < 0)
+        // A trimmed libmpv build may omit optional features, in which case their
+        // option is unknown (MPV_ERROR_OPTION_NOT_FOUND). Only essentials are fatal.
+        if (status < 0 && (required || status != MPV_ERROR_OPTION_NOT_FOUND))
             throw std::runtime_error(QString("libmpv option %1: %2").arg(name, mpv_error_string(status)).toStdString());
     };
     try {
         option("config", "no");
-        option("load-scripts", "no");
+        // Scripting may be compiled out, so this is best-effort.
+        option("load-scripts", "no", false);
         option("vo", "null");
         option("video", "no");
         option("sid", "no");

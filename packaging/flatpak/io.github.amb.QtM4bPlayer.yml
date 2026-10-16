@@ -19,17 +19,9 @@ finish-args:
   # Add e.g. --filesystem=/mnt/nas with `flatpak override` for other mounts.
   - --filesystem=home
 
-# The base runtime FFmpeg is stripped. The app reads captions and metadata with
-# FFmpeg directly, so pull in the fuller codec set. Branch matches the parent
-# Freedesktop runtime of org.kde.Platform 6.10.
-add-extensions:
-  org.freedesktop.Platform.ffmpeg-full:
-    directory: lib/ffmpeg
-    version: '25.08'
-    add-ld-path: .
-    autodelete: false
-cleanup-commands:
-  - mkdir -p /app/lib/ffmpeg
+# The runtime FFmpeg already provides the AAC decoder, the mov/mp4 demuxer and
+# the mov_text decoder this app needs. No ffmpeg-full extension is declared: it
+# has no Flathub branch newer than 24.08 and is not required here.
 
 cleanup:
   - /include
@@ -43,6 +35,18 @@ modules:
   # libmpv is not in the KDE runtime, so mpv and its subtitle/GPU helper
   # libraries are built here. libass and libplacebo bind their own optional
   # dependencies from the SDK (fontconfig, harfbuzz, freetype, vulkan, shaderc).
+  # libplacebo's shader generator runs at build time and imports jinja2, which
+  # the SDK does not ship (it does ship MarkupSafe). Install the pure-Python
+  # wheel into /app/lib/python3.13/site-packages, already on the SDK sys.path.
+  - name: python3-jinja2
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=/app --no-deps --no-index jinja2-3.1.6-py3-none-any.whl
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl
+        sha256: 85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
+
   - name: libass
     buildsystem: autotools
     config-opts:
@@ -59,6 +63,8 @@ modules:
     config-opts:
       - -Dvulkan=enabled
       - -Dshaderc=enabled
+      - -Dopengl=disabled
+      - -Dd3d11=disabled
       - -Ddemos=false
       - -Dtests=false
     sources:

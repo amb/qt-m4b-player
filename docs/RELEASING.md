@@ -15,7 +15,6 @@ who build it themselves; the Flatpak is the supported end-user artifact.
 | Command | `qt-m4b-player` |
 | Bundle file | `io.github.amb.QtM4bPlayer.flatpak` |
 | Runtime | `org.kde.Platform` / `org.kde.Sdk` `6.10` |
-| Codec extension | `org.freedesktop.Platform.ffmpeg-full` `25.08` |
 
 The app id is used for the sandbox, the desktop entry (`io.github.amb.QtM4bPlayer.desktop`),
 the icon name and the Wayland `app_id`. Change it in one place only if you fork:
@@ -34,8 +33,7 @@ agree. Tag the release `vx.y.z`.
 ```bash
 sudo apt install flatpak flatpak-builder gh
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install flathub org.kde.Sdk//6.10 org.kde.Platform//6.10 \
-  org.freedesktop.Platform.ffmpeg-full//25.08
+flatpak install flathub org.kde.Sdk//6.10 org.kde.Platform//6.10
 ```
 
 ## Build the bundle
@@ -55,9 +53,10 @@ modules the KDE runtime does not provide, then the app:
    PulseAudio only).
 4. **qt-m4b-player** – the app, from the current checkout (`type: dir`).
 
-The app links the runtime's FFmpeg; the `ffmpeg-full` extension supplies the
-fuller codec set at runtime. Keep the extension branch in step with the runtime:
-`org.kde.Platform 6.10` is based on Freedesktop `25.08`.
+The app links the runtime's FFmpeg. That base FFmpeg already includes the AAC
+decoder, the `mov,mp4` demuxer and the `mov_text` decoder used for metadata,
+chapters and captions; the `org.freedesktop.Platform.ffmpeg-full` extension is
+not needed (and has no Flathub branch newer than 24.08).
 
 ## Test the bundle
 

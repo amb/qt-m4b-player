@@ -4,8 +4,7 @@
 # Prerequisites:
 #   sudo apt install flatpak flatpak-builder
 #   flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-#   flatpak install flathub org.kde.Sdk//6.10 org.kde.Platform//6.10 \
-#     org.freedesktop.Platform.ffmpeg-full//25.08
+#   flatpak install flathub org.kde.Sdk//6.10 org.kde.Platform//6.10
 #
 # Usage:
 #   scripts/build-flatpak.sh [output.flatpak]
