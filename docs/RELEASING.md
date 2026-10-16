@@ -115,7 +115,7 @@ If a system theme does not apply, first check that
 
 ## Open items
 
-- The Flatpak manifest has not yet been built end to end. Run
-  `scripts/build-flatpak.sh` once and fix any module drift before the first tag.
 - AppStream screenshots are not included yet, so software-center listings show
   no preview images. Add a `<screenshots>` section to the metainfo later.
+- The bundle is built and verified for x86_64. Add per-architecture build testing
+  (and any needed wheels) before publishing an aarch64 release.
