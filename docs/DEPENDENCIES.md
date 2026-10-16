@@ -10,7 +10,6 @@ shared-library packages and the relevant dynamically loaded Qt plugins.
 | Qt Base / SQL | 6.10.2 | `6.10.2+dfsg-7` |
 | Qt Declarative / Quick / QML | 6.10.2 | `6.10.2+dfsg-3` |
 | Qt SVG image plugin | 6.10.2 | `6.10.2-2` |
-| Qt Quick Effects (icon recolouring) | 6.10.2 | `qml6-module-qtquick-effects 6.10.2+dfsg-3` |
 | mpv engine | 0.41.0 | `0.41.0-2ubuntu4` |
 | libmpv client API reported by pkg-config | 2.5.0 | Same mpv package |
 | FFmpeg | 8.0.1 | `7:8.0.1-3ubuntu2` |
@@ -41,9 +40,10 @@ The bundled Phosphor icon assets use `@phosphor-icons/core` 2.1.1, pinned to
 commit `2b75f3ad12b420c9504ef05df8d2564a28f8500e`. They are MIT licensed;
 [the asset manifest](../assets/icons/manifest.json) records exact source URLs
 and SHA-256 checksums. Qt's SVG plugin renders them; it is already installed on
-this host and is included in the package inventory. The QML imports
-`QtQuick.Effects` (Qt 6.5+, `qml6-module-qtquick-effects` on Ubuntu) to recolour
-the monochrome glyphs from the active palette.
+this host and is included in the package inventory. A `QQuickImageProvider`
+rasterizes the SVGs at the requested pixel size and uses `QPainter` to tint
+their alpha masks from the active palette. The resulting ordinary QML images
+work with both software and GPU rendering, without a Qt Quick Effects dependency.
 
 Release builds are distributed as self-hosted Flatpak bundles built against the
 `org.kde.Platform` runtime, which supplies Qt and KDE Frameworks; mpv, libass and

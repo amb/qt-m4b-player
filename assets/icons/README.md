@@ -17,4 +17,6 @@ source URLs and SHA-256 checksums for originals, variants, and the license.
 The filled transport, eject, and speaker symbols and regular chapter/seek
 symbols are chosen to approximate the reference application's icon weights.
 Qt's SVG image plugin (`libqt6svg6` on this host) renders the bundled vectors
-at the display's pixel density. No icon font or network access is required.
+at the display's pixel density. `TransportIconProvider` tints their alpha masks
+with the active palette colour before QML displays them, so software and GPU
+renderers show the same icons. No icon font or network access is required.

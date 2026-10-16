@@ -1,8 +1,7 @@
 import QtQuick
-import QtQuick.Effects
 
 // Recolours a vendored Phosphor glyph to the current theme colour so the icon
-// follows the platform (KDE) palette instead of shipping a fixed tint.
+// follows the platform (KDE) palette on both software and GPU renderers.
 Item {
     id: icon
     property string name: ""
@@ -12,17 +11,10 @@ Item {
         id: image
         objectName: "transportIconImage"
         anchors.fill: parent
-        visible: false
-        source: icon.name ? "qrc:/icons/" + icon.name + "-light.svg" : ""
+        source: icon.name ? "image://transport/" + encodeURIComponent(icon.name)
+            + "/" + encodeURIComponent(icon.color.toString()) : ""
         sourceSize.width: width * Screen.devicePixelRatio
         sourceSize.height: height * Screen.devicePixelRatio
-    }
-    MultiEffect {
-        anchors.fill: parent
-        source: image
-        visible: icon.name.length > 0
-        colorization: 1.0
-        colorizationColor: icon.color
     }
     Text {
         anchors.centerIn: parent

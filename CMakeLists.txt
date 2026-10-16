@@ -33,7 +33,8 @@ target_compile_options(player-core PRIVATE -Wall -Wextra -Wpedantic)
 add_executable(media-inspect tools/InspectMedia.cpp)
 target_link_libraries(media-inspect PRIVATE player-core)
 
-qt_add_executable(qt-m4b-player src/main.cpp src/WindowPreferences.h src/WindowPreferences.cpp)
+qt_add_executable(qt-m4b-player src/main.cpp src/WindowPreferences.h src/WindowPreferences.cpp
+    src/TransportIconProvider.h src/TransportIconProvider.cpp)
 qt_add_qml_module(qt-m4b-player
     URI AudiobookPlayer
     VERSION 1.0
@@ -70,6 +71,17 @@ if(BUILD_TESTING)
     target_include_directories(window-tests PRIVATE src)
     target_link_libraries(window-tests PRIVATE Qt6::Gui Qt6::Test)
     add_test(NAME window COMMAND window-tests)
+    qt_add_executable(icon-tests tests/IconTests.cpp
+        src/TransportIconProvider.h src/TransportIconProvider.cpp)
+    set_target_properties(icon-tests PROPERTIES QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
+    target_include_directories(icon-tests PRIVATE src)
+    target_link_libraries(icon-tests PRIVATE Qt6::Quick Qt6::Test)
+    target_compile_definitions(icon-tests PRIVATE FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+    qt_add_resources(icon-tests transport-test-icons
+        PREFIX "/icons" BASE "assets/icons" FILES ${TRANSPORT_ICON_FILES})
+    add_test(NAME icons COMMAND icon-tests)
+    set_tests_properties(icons PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=generic;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic;QT_SCALE_FACTOR=1")
     set_tests_properties(core player window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 install(TARGETS qt-m4b-player RUNTIME DESTINATION bin)

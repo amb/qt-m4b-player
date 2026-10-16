@@ -52,7 +52,7 @@ sudo apt install build-essential cmake ninja-build pkg-config python3 \
   libmpv-dev libavformat-dev libavcodec-dev libavutil-dev \
   qml6-module-qtquick-controls qml6-module-qtquick-dialogs \
   qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
-  qml6-module-qtquick-effects libqt6sql6-sqlite libqt6svg6
+  libqt6sql6-sqlite libqt6svg6
 ```
 
 ```bash
@@ -111,7 +111,7 @@ The UI follows the desktop colour scheme and ships no palette of its own. On KDE
 Plasma install `qml6-module-org-kde-breeze` (or
 `qml6-module-org-kde-qqc2desktopstyle`) so the KDE Quick Controls style is used;
 otherwise the app falls back to Qt's default style. Transport icons are
-recoloured from the active palette.
+recoloured on the CPU from the active palette, including with Qt's software renderer.
 
 ## Storage and development
 

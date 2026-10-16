@@ -2,6 +2,7 @@
 #include "PlayerController.h"
 #include "WindowPreferences.h"
 #include "AppPreferences.h"
+#include "TransportIconProvider.h"
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -78,6 +79,7 @@ int main(int argc, char *argv[])
         }
         AppPreferences preferences(data + "/settings.ini");
         QQmlApplicationEngine engine;
+        engine.addImageProvider("transport", new TransportIconProvider);
         engine.setInitialProperties({{"player", QVariant::fromValue(&player)},
                                      {"preferences", QVariant::fromValue(&preferences)}});
         QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
