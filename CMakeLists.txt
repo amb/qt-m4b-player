@@ -73,6 +73,13 @@ if(BUILD_TESTING)
     set_tests_properties(core player window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 install(TARGETS qt-m4b-player RUNTIME DESTINATION bin)
-install(FILES packaging/qt-m4b-player.desktop DESTINATION share/applications)
+install(FILES packaging/io.github.amb.QtM4bPlayer.desktop DESTINATION share/applications)
+install(FILES packaging/flatpak/io.github.amb.QtM4bPlayer.metainfo.xml DESTINATION share/metainfo)
+install(FILES packaging/icons/io.github.amb.QtM4bPlayer.svg
+        DESTINATION share/icons/hicolor/scalable/apps)
+foreach(icon_size 16 32 48 64 128 256 512)
+    install(FILES packaging/icons/${icon_size}x${icon_size}/io.github.amb.QtM4bPlayer.png
+            DESTINATION share/icons/hicolor/${icon_size}x${icon_size}/apps)
+endforeach()
 
-install(FILES assets/icons/LICENSE.phosphor DESTINATION share/licenses/qt-m4b-player)
+install(FILES LICENSE assets/icons/LICENSE.phosphor DESTINATION share/licenses/qt-m4b-player)

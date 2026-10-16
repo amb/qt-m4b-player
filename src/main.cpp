@@ -5,6 +5,7 @@
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QLibraryInfo>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -12,6 +13,26 @@
 #include <QTimer>
 #include <clocale>
 #include <iostream>
+
+namespace {
+// QQuickStyle has no public "is this style installed?" query, so probe the QML
+// import roots directly. The KDE runtime installs styles under its import path.
+bool qmlStyleAvailable(const QString &modulePath)
+{
+    QStringList roots{QLibraryInfo::path(QLibraryInfo::QmlImportsPath)};
+    const QByteArray extra = qgetenv("QML2_IMPORT_PATH");
+    if (!extra.isEmpty()) {
+        const QList<QByteArray> paths = extra.split(':');
+        for (const QByteArray &path : paths)
+            roots.append(QString::fromLocal8Bit(path));
+    }
+    for (const QString &root : roots) {
+        if (!root.isEmpty() && QFileInfo::exists(root + '/' + modulePath + "/qmldir"))
+            return true;
+    }
+    return false;
+}
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -22,7 +43,17 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName("qt-m4b-player");
     QCoreApplication::setApplicationName("qt-m4b-player");
     QCoreApplication::setApplicationVersion("0.1.0");
-    QQuickStyle::setStyle("Basic");
+    QGuiApplication::setDesktopFileName(QStringLiteral("io.github.amb.QtM4bPlayer"));
+    // Do not pin Qt's Basic style: it ignores the platform palette. Respect an
+    // explicit QT_QUICK_CONTROLS_STYLE override, otherwise adopt the KDE Quick
+    // Controls style when the platform provides one so the UI follows the
+    // system colour scheme. Non-KDE hosts keep Qt's default style.
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
+        if (qmlStyleAvailable(QStringLiteral("org/kde/breeze")))
+            QQuickStyle::setStyle(QStringLiteral("org.kde.breeze"));
+        else if (qmlStyleAvailable(QStringLiteral("org/kde/desktop")))
+            QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+    }
     QCommandLineParser parser;
     parser.setApplicationDescription("Local M4B audiobook player — Linux prototype");
     parser.addHelpOption();

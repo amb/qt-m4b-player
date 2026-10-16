@@ -51,7 +51,8 @@ sudo apt install build-essential cmake ninja-build pkg-config python3 \
   qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools \
   libmpv-dev libavformat-dev libavcodec-dev libavutil-dev \
   qml6-module-qtquick-controls qml6-module-qtquick-dialogs \
-  qml6-module-qtquick-layouts qml6-module-qtqml-workerscript libqt6sql6-sqlite libqt6svg6
+  qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
+  qml6-module-qtquick-effects libqt6sql6-sqlite libqt6svg6
 ```
 
 ```bash
@@ -101,7 +102,16 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
 `--dependency-versions` prints the runtime Qt, mpv engine and SQLite versions.
 `--screenshot PATH` writes a window image while `--smoke-test` runs.
 `linux-release` is the release configure/build preset. The optional CMake install
-target installs the executable and desktop entry; it is not a self-contained bundle.
+target installs the executable, desktop entry, AppStream metadata and icons; it
+is not a self-contained bundle. Self-hosted Flatpak bundles built from
+`packaging/flatpak/` are attached to GitHub releases; see
+[releasing](docs/RELEASING.md).
+
+The UI follows the desktop colour scheme and ships no palette of its own. On KDE
+Plasma install `qml6-module-org-kde-breeze` (or
+`qml6-module-org-kde-qqc2desktopstyle`) so the KDE Quick Controls style is used;
+otherwise the app falls back to Qt's default style. Transport icons are
+recoloured from the active palette.
 
 ## Storage and development
 
@@ -149,3 +159,8 @@ roughly 12-hour M4B. Metadata read took about 0.2 seconds and full caption index
 about 7.5 seconds on that run. The optional libmpv load/seek/background-index
 check passed with silent output and an isolated temporary library. These timings
 are observations from one share/cache state, not latency guarantees.
+
+## License
+
+MIT; see [LICENSE](LICENSE). The vendored Phosphor icons are MIT as well
+([provenance](assets/icons/README.md)).

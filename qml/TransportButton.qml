@@ -5,6 +5,11 @@ Button {
     id: control
     property string description: ""
     property string iconName: ""
+    // Marks a button drawn on the highlight colour, e.g. the primary action.
+    property bool emphasized: false
+    readonly property color foregroundColor: !control.enabled ? control.palette.placeholderText
+        : (control.checked || control.emphasized) ? control.palette.highlightedText
+        : control.palette.buttonText
     implicitWidth: 48
     implicitHeight: 48
     font.pixelSize: 20
@@ -13,8 +18,11 @@ Button {
     ToolTip.text: description
     background: Rectangle {
         radius: 12
-        color: control.down ? "#5b5b64" : control.checked ? "#e1e1e5" : control.hovered ? "#4b4b53" : "transparent"
-        border.color: control.activeFocus ? "#b5dbe4" : "transparent"
+        color: control.down ? Qt.darker(control.palette.button, 1.15)
+            : control.checked ? control.palette.highlight
+            : control.hovered ? control.palette.button
+            : "transparent"
+        border.color: control.activeFocus ? control.palette.highlight : "transparent"
         border.width: 2
     }
     contentItem: Item {
@@ -24,15 +32,15 @@ Button {
             height: 28
             visible: control.iconName.length > 0
             name: control.iconName
-            dark: control.checked
-            opacity: control.enabled ? 1 : 0.35
+            color: control.foregroundColor
+            opacity: control.enabled ? 1 : 0.5
         }
         Text {
             anchors.fill: parent
             visible: control.iconName.length === 0
             text: control.text
             font: control.font
-            color: !control.enabled ? "#686870" : control.checked ? "#25252a" : "#ededf0"
+            color: control.foregroundColor
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }

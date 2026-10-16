@@ -1,8 +1,13 @@
 [Desktop Entry]
 Type=Application
 Name=qt-m4b-player
+GenericName=Audiobook Player
 Comment=Local M4B audiobook player
 Exec=qt-m4b-player %f
+Icon=io.github.amb.QtM4bPlayer
 Terminal=false
 Categories=Audio;AudioVideo;
+Keywords=audiobook;m4b;mpv;chapters;captions;
 MimeType=audio/mp4;audio/x-m4b;
+StartupNotify=true
+StartupWMClass=io.github.amb.QtM4bPlayer

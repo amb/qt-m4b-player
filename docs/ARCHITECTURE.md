@@ -92,8 +92,9 @@ otherwise plausible alternative, so they are easy to reintroduce by accident.
 3. **Product parity on Linux:** notes, ratings, settings/defaults,
    multi-window sessions, saved cover framing and drop/open routing;
    manual keyboard/screen-reader validation.
-4. **Linux integration/distribution:** focused-session MPRIS, desktop packaging
-   and a deliberate dynamic-library distribution/version policy.
+4. **Linux integration/distribution:** self-hosted Flatpak release bundles
+   (KDE runtime, mpv built in the manifest), KDE colour-scheme theming and
+   focused-session MPRIS.
 5. **Android:** Qt Android toolchain, pinned NDK/SDK/Qt builds, Android builds of
    libmpv/FFmpeg, managed file import or durable document access, and a native
    foreground playback service/media session. Add audio focus, output-route
@@ -113,6 +114,11 @@ configured library versions in the build directory. The version report records
 distro revisions and discovered dynamic-library packages. Adopt a separate
 package manager only when cross-platform packaging needs justify it. See
 [dependency policy](DEPENDENCIES.md).
+
+Release artifacts are self-hosted Flatpak bundles built from
+`packaging/flatpak/` against `org.kde.Platform`; see [releasing](RELEASING.md).
+The app declares no theme: it selects the KDE Quick Controls style when present
+and derives all colours from the platform palette.
 
 All privileged commands (package installation and other system changes) are run
 by the developer. Nothing in this repository should invoke `sudo`.

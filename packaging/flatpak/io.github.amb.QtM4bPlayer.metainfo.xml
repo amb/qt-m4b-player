@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream metadata used by software centres and Flatpak. The metadata license
+  (CC0-1.0) covers this XML file only; the project itself is MIT.
+-->
+<component type="desktop-application">
+  <id>io.github.amb.QtM4bPlayer</id>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>qt-m4b-player</name>
+  <summary>Local M4B audiobook player</summary>
+
+  <developer id="io.github.amb">
+    <name>amb</name>
+  </developer>
+
+  <description>
+    <p>
+      A C++/Qt Quick audiobook player for Linux. It opens local M4B/M4A files,
+      plays them with libmpv, reads chapters, cover art and embedded captions
+      with FFmpeg, and keeps its library, progress and preferences in a local
+      SQLite database.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Chapter-aware navigation and scrubbing</li>
+      <li>Pause-and-remember chapter switching</li>
+      <li>Embedded mov_text captions with audio-timed auto-scrolling</li>
+      <li>Pitch-preserving playback speed and volume control</li>
+      <li>Recent locations and saved resume positions</li>
+      <li>Follows the desktop (KDE Plasma) colour scheme</li>
+    </ul>
+    <p>Playback never modifies the audiobook files.</p>
+  </description>
+
+  <launchable type="desktop-id">io.github.amb.QtM4bPlayer.desktop</launchable>
+  <url type="homepage">https://github.com/amb/qt-m4b-player</url>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+  </categories>
+
+  <keywords>
+    <keyword>audiobook</keyword>
+    <keyword>m4b</keyword>
+    <keyword>chapters</keyword>
+    <keyword>captions</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-10-16">
+      <description>
+        <p>First Linux prototype release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

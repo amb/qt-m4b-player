@@ -11,19 +11,8 @@ ApplicationWindow {
     required property AppPreferences preferences
     readonly property bool wideControls: width >= 740
     readonly property var playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
-    palette.window: "#24343e"
-    palette.windowText: "#edf5f6"
-    palette.base: "#17232b"
-    palette.text: "#edf5f6"
-    palette.button: "#344954"
-    palette.buttonText: "#edf5f6"
-    palette.highlight: "#526a76"
-    palette.highlightedText: "#ffffff"
-    palette.light: "#40515c"
-    palette.midlight: "#52616c"
-    palette.mid: "#40515c"
-    palette.dark: "#121b22"
-    palette.disabled.windowText: "#7e858b"
+    // Follow the platform colour scheme; the application ships no palette of its own.
+    color: palette.window
     width: 520
     height: 800
     minimumWidth: 390
@@ -31,7 +20,6 @@ ApplicationWindow {
     // C++ restores the saved size/state before showing the window.
     visible: false
     title: window.player.loaded ? window.player.title + (window.player.author ? " — " + window.player.author : "") : "qt-m4b-player"
-    color: "#17232b"
 
     function formatTime(seconds: real): string {
         let value = Math.max(0, Math.floor(seconds))
@@ -150,7 +138,6 @@ ApplicationWindow {
     }
 
     menuBar: MenuBar {
-        background: Rectangle { color: "#19242c" }
         Menu {
             title: "&File"
             width: Math.min(window.width - 16, 320)
@@ -283,7 +270,7 @@ ApplicationWindow {
         Label {
             width: parent.width
             text: window.player.fileUrl.toString() ? "Opening audiobook…" : "Your next chapter"
-            color: "#edf5f6"
+            color: window.palette.windowText
             font.pixelSize: 28
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
@@ -291,7 +278,8 @@ ApplicationWindow {
         Label {
             width: parent.width
             text: "Open an M4B file to listen and read its embedded captions."
-            color: "#b4c6cd"
+            color: window.palette.windowText
+            opacity: 0.75
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
         }
@@ -310,7 +298,8 @@ ApplicationWindow {
             visible: window.player.error.length > 0
             height: visible ? errorText.implicitHeight + 32 : 0
             radius: 12
-            color: "#6c3038"
+            // No palette role exists for errors; a fixed red stays legible in both schemes.
+            color: "#b3261e"
             Label {
                 id: errorText
                 anchors.left: parent.left
@@ -356,7 +345,9 @@ ApplicationWindow {
             width: parent.width
             height: controls.implicitHeight + 32
             radius: 20
-            color: "#dc303034"
+            // Translucent window colour keeps the panel adaptive over artwork.
+            color: Qt.rgba(window.palette.window.r, window.palette.window.g,
+                           window.palette.window.b, 0.85)
             ColumnLayout {
                 id: controls
                 anchors.left: parent.left
@@ -367,6 +358,7 @@ ApplicationWindow {
                 ProgressHeader {
                     id: progressHeader
                     Layout.fillWidth: true
+                    textColor: window.palette.windowText
                     chapterText: window.player.currentChapter >= 0 ? window.player.chapters[window.player.currentChapter].title : "Whole book"
                     positionText: window.formatTime(window.player.position - window.player.chapterStart) + " of " + window.formatTime(window.player.chapterEnd - window.player.chapterStart)
                     readonly property real remaining: Math.max(0, window.player.duration - window.player.position)
@@ -396,30 +388,7 @@ ApplicationWindow {
                         }
                     }
                     onMoved: if (!pressed) window.player.seek(value)
-                    background: Rectangle {
-                        x: progress.leftPadding
-                        y: progress.topPadding + progress.availableHeight / 2 - height / 2
-                        width: progress.availableWidth
-                        height: 4
-                        radius: 2
-                        color: "#5b5b61"
-                        Rectangle {
-                            width: progress.visualPosition * parent.width
-                            height: parent.height
-                            radius: parent.radius
-                            color: "#287be9"
-                        }
-                    }
-                    handle: Rectangle {
-                        x: progress.leftPadding + progress.visualPosition * (progress.availableWidth - width)
-                        y: progress.topPadding + progress.availableHeight / 2 - height / 2
-                        implicitWidth: 18
-                        implicitHeight: 18
-                        radius: 9
-                        color: progress.pressed ? "#dedee3" : "#a2a2a9"
-                        border.width: progress.activeFocus ? 2 : 0
-                        border.color: "#edf5f6"
-                    }
+                    // Keep the native style slider so its accent follows the platform scheme.
                 }
                 GridLayout {
                     columns: window.wideControls ? 2 : 1
@@ -436,13 +405,16 @@ ApplicationWindow {
                             action: playAction
                             iconName: window.player.playing ? "pause" : "play"
                             description: window.player.playing ? "Pause" : "Play"
+                            emphasized: true
                             implicitWidth: 56
                             implicitHeight: 56
                             background: Rectangle {
                                 radius: 28
-                                color: playButton.down ? "#77777f" : playButton.hovered ? "#67676f" : "#56565e"
+                                color: playButton.down ? Qt.darker(playButton.palette.highlight, 1.2)
+                                    : playButton.hovered ? Qt.lighter(playButton.palette.highlight, 1.1)
+                                    : playButton.palette.highlight
                                 border.width: playButton.activeFocus ? 2 : 0
-                                border.color: "#edf5f6"
+                                border.color: playButton.palette.highlightedText
                             }
                         }
                         TransportButton { action: forwardAction; iconName: "forward"; description: "Forward ten seconds" }

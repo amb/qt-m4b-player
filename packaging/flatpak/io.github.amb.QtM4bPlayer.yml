@@ -1,0 +1,140 @@
+# Self-hosted Flatpak manifest for qt-m4b-player.
+#
+# Build a bundle with scripts/build-flatpak.sh (requires flatpak-builder), then
+# attach the resulting .flatpak to a GitHub release. Nothing here is submitted
+# to Flathub; the app id is only used for the sandbox and desktop integration.
+app-id: io.github.amb.QtM4bPlayer
+runtime: org.kde.Platform
+runtime-version: '6.10'
+sdk: org.kde.Sdk
+command: qt-m4b-player
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  # The player opens arbitrary local paths and remembers them across launches.
+  # Add e.g. --filesystem=/mnt/nas with `flatpak override` for other mounts.
+  - --filesystem=home
+
+# The base runtime FFmpeg is stripped. The app reads captions and metadata with
+# FFmpeg directly, so pull in the fuller codec set. Branch matches the parent
+# Freedesktop runtime of org.kde.Platform 6.10.
+add-extensions:
+  org.freedesktop.Platform.ffmpeg-full:
+    directory: lib/ffmpeg
+    version: '25.08'
+    add-ld-path: .
+    autodelete: false
+cleanup-commands:
+  - mkdir -p /app/lib/ffmpeg
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - /share/doc
+  - '*.a'
+  - '*.la'
+
+modules:
+  # libmpv is not in the KDE runtime, so mpv and its subtitle/GPU helper
+  # libraries are built here. libass and libplacebo bind their own optional
+  # dependencies from the SDK (fontconfig, harfbuzz, freetype, vulkan, shaderc).
+  - name: libass
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+      - --enable-harfbuzz
+      - --enable-fontconfig
+    sources:
+      - type: archive
+        url: https://github.com/libass/libass/releases/download/0.17.5/libass-0.17.5.tar.gz
+        sha256: caab4b993dd7be6187c55623b789ed75dddefea6e65938af134637c732fe094a
+
+  - name: libplacebo
+    buildsystem: meson
+    config-opts:
+      - -Dvulkan=enabled
+      - -Dshaderc=enabled
+      - -Ddemos=false
+      - -Dtests=false
+    sources:
+      - type: archive
+        url: https://github.com/haasn/libplacebo/archive/refs/tags/v7.360.1.tar.gz
+        sha256: d05fdf90bea2f629eaa2d115e909fd356388ac639e54f77b87a018a6d76224bd
+
+  # Audio-only libmpv: video outputs, disc/stream inputs and script engines are
+  # disabled to keep the bundle small. PulseAudio is the Flatpak audio socket.
+  - name: mpv
+    buildsystem: meson
+    config-opts:
+      - -Dlibmpv=true
+      - -Dcplayer=false
+      - -Dbuild-date=false
+      - -Dtests=false
+      - -Dfuzzers=false
+      - -Dzlib=enabled
+      - -Diconv=enabled
+      - -Dpulse=enabled
+      - -Dpipewire=disabled
+      - -Dalsa=disabled
+      - -Djack=disabled
+      - -Dopenal=disabled
+      - -Dsdl2-audio=disabled
+      - -Doss-audio=disabled
+      - -Dsndio=disabled
+      - -Dx11=disabled
+      - -Dwayland=disabled
+      - -Ddmabuf-wayland=disabled
+      - -Ddrm=disabled
+      - -Dgbm=disabled
+      - -Degl=disabled
+      - -Dgl=disabled
+      - -Dplain-gl=disabled
+      - -Dvulkan=disabled
+      - -Dshaderc=disabled
+      - -Dspirv-cross=disabled
+      - -Dvaapi=disabled
+      - -Dvdpau=disabled
+      - -Dcuda-hwaccel=disabled
+      - -Dcuda-interop=disabled
+      - -Dd3d11=disabled
+      - -Dsixel=disabled
+      - -Dxv=disabled
+      - -Dcaca=disabled
+      - -Ddvdnav=disabled
+      - -Dcdda=disabled
+      - -Dlibbluray=disabled
+      - -Dlibarchive=disabled
+      - -Ddvbin=disabled
+      - -Dvapoursynth=disabled
+      - -Djavascript=disabled
+      - -Dlua=disabled
+      - -Duchardet=disabled
+      - -Dzimg=disabled
+      - -Drubberband=disabled
+      - -Dlcms2=disabled
+      - -Dcplugins=disabled
+      - -Djpeg=disabled
+      - -Dlibavdevice=disabled
+      - -Dwerror=false
+    sources:
+      - type: archive
+        url: https://github.com/mpv-player/mpv/archive/refs/tags/v0.41.0.tar.gz
+        sha256: ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209
+
+  - name: qt-m4b-player
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - -DBUILD_TESTING=OFF
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - build
+          - .cache
+          - .git
