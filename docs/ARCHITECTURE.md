@@ -51,13 +51,36 @@ Broader multi-language and edit-list compatibility needs real-book validation.
   Untouched preference fields remain NULL, representing an unset choice.
 - Save progress at significant transport actions, replacement, shutdown and
   every 30 seconds of advancing playback.
+- Keep the reference UI's narrow/wide responsive layouts and its full menu bar
+  when adding or rearranging controls.
 
-Schema v1 is initialized transactionally with `PRAGMA user_version`. A newer
-schema is rejected. Before adding a v2 migration, implement SQLite online backup
-and recovery tests; there is currently no upgrade migration that changes an
-existing schema. This project's schema is distinct from the macOS schema.
-See [database schema and feature parity](SCHEMA_AND_FEATURE_PARITY.md) for the
-column comparison, persistence behavior and implemented/missing features.
+Schema v2 is initialized transactionally and stamped with `PRAGMA user_version`
+and an `application_id` that identifies our files. A newer schema is rejected,
+and so is an unrelated SQLite file. Version 1 databases are upgraded in place
+after a timestamped backup. This project's schema is deliberately distinct from
+the macOS schema and is not intended to interoperate with it; see
+[database schema and feature parity](SCHEMA_AND_FEATURE_PARITY.md) for the schema
+details, the robustness guarantees and the implemented/missing features.
+
+## Startup and initialization constraints
+
+These are ordering requirements, not preferences. Each was broken by an
+otherwise plausible alternative, so they are easy to reintroduce by accident.
+
+- `main.cpp` sets `LC_NUMERIC` to `C` **after** `QGuiApplication` is constructed
+  and before libmpv or any worker exists. Qt adopts the system locale, so setting
+  it earlier does not fix libmpv startup under a comma-decimal locale such as
+  `fi_FI.UTF-8`. Any test or harness that constructs `PlayerController` directly
+  must set it itself; this is why `ctest` needs `LC_ALL=C` on such a host.
+- `Main.qml` requires **both** the `player` and `preferences` initial properties.
+  A new QML harness must supply both.
+- The main window starts hidden. Restore size and state, then call `showNormal()`
+  or `showMaximized()` explicitly. A plain `show()` loses the restored maximized
+  state across an application restart.
+- `WindowPreferences` and `AppPreferences` share one INI file but own separate
+  keys, so saving window state must preserve appearance values.
+- Help and About use the explicitly sized `InfoPopup.qml`. A Qt `Dialog`
+  produced a sizing loop.
 
 ## Milestones
 
@@ -90,3 +113,6 @@ configured library versions in the build directory. The version report records
 distro revisions and discovered dynamic-library packages. Adopt a separate
 package manager only when cross-platform packaging needs justify it. See
 [dependency policy](DEPENDENCIES.md).
+
+All privileged commands (package installation and other system changes) are run
+by the developer. Nothing in this repository should invoke `sudo`.

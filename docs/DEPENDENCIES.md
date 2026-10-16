@@ -22,6 +22,16 @@ The `mpv.pc` version is the **client API** version, not the engine release.
 FFmpeg components similarly expose library versions separate from the FFmpeg
 release. Record both instead of comparing unlike version numbers.
 
+Build tooling from the same baseline:
+
+| Tool | Version | Ubuntu package |
+| --- | --- | --- |
+| CMake | 4.2.3 | `cmake 4.2.3-2ubuntu2` |
+| Ninja | 1.13.2 | `ninja-build 1.13.2-1` |
+| GNU C++ | 15.2.0 | `g++ 4:15.2.0-5ubuntu1` |
+| pkg-config | 2.5.1 | — |
+| Python 3 | 3.14.3 | `python3 3.14.3-0ubuntu2` |
+
 CMake requires Qt >= 6.5, libmpv API >= 2.0, and FFmpeg 6-era library versions
 or newer. These are build minimums; only the baseline above has been validated.
 No code or headers are downloaded during configuration.

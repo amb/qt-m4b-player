@@ -1,15 +1,45 @@
 # Database schema and feature parity
 
-Snapshot: **2026-10-12**. macOS reference commit:
-`7dd0c79a117bff96cd7faecf5423d50821e49d6c`.
+Snapshot: **2026-10-16**.
 
-The Qt app is a separate Linux prototype. Its quick fingerprints match the macOS
-app, but its SQLite schema is different. Database import, shared database access
-and synchronization between the apps are not implemented. The macOS project is
-a read-only reference and has not been modified by the port.
+This document describes the Qt/Linux library format, its robustness guarantees
+and its relationship to the macOS reference app. Update it whenever storage
+changes. See [architecture](ARCHITECTURE.md) for ownership and platform
+milestones.
 
-Update this document when storage or user-visible features change. See
-[architecture](ARCHITECTURE.md) for ownership and platform milestones.
+## Scope decision: the Qt schema is its own design
+
+The Qt app stores a **single-platform, Qt-native** database. It does **not**
+attempt macOS/GRDB compatibility. There is no importer, exporter, shared
+database mode or synchronization, and the macOS database is never opened or
+migrated by this project.
+
+An earlier draft of this document proposed aligning the columns with the macOS
+schema. That was rejected: without a defined compatibility layer, a source of
+truth and a shared platform, mimicking GRDB's schema buys no interoperability
+while forcing a surrogate-key model that is larger and more awkward than the
+fingerprint-keyed design below. The comparison was made against commit
+`7dd0c79a117bff96cd7faecf5423d50821e49d6c` of `macos-m4b-player`.
+
+The only intentional overlap with macOS is the **identity hash** below, which is
+kept because it is already useful on its own: it lets byte-identical local and
+NAS copies of a book share progress.
+
+Divergences from the macOS schema are therefore deliberate. Do not "fix" them
+without a concrete interoperability requirement:
+
+| Data | macOS reference | Qt/Linux |
+| --- | --- | --- |
+| Book key | Integer `books.id` surrogate | `books.fingerprint` natural key |
+| Location key | Integer `book_locations.id` | `book_locations.path` |
+| Location link | `book_id` | `fingerprint` |
+| Listening position | `last_position` | `position` |
+| CC preference | `captions_enabled` | `captions` |
+| Review | `review` column | Not modelled; no review concept |
+| Artwork | `cover_path` column | External `covers/` cache, keyed by fingerprint |
+| File attributes | `file_size`, `file_modified_at` | Not stored; identity is the fingerprint |
+| Timestamps | GRDB datetime text | Integer Unix epoch milliseconds |
+| Migration tracking | GRDB named migrations | `PRAGMA user_version` + `application_id` |
 
 ## Book identity: compatible quick fingerprints
 
@@ -25,15 +55,13 @@ read for hashing. Filenames, directories and modification times are not hashed,
 so byte-identical NAS and local copies have the same identity.
 
 This is a sampled identity, not a full-file integrity checksum. Changing only
-unsampled bytes in the middle of a file without changing its length can leave
-the fingerprint unchanged.
+unsampled bytes in the middle of a file without changing its length can leave the
+fingerprint unchanged.
 
 Qt implementation: [MediaData.cpp](../src/MediaData.cpp). Compatibility checks
 include a known fixture fingerprint in [CoreTests.cpp](../tests/CoreTests.cpp).
-The reference implementation is `PlayerModel.quickFingerprint(of:)` in
-`macos-m4b-player/Sources/m4b-player/PlayerModel.swift`.
 
-## Current Qt storage
+## Storage locations
 
 The default directory is normally
 `~/.local/share/qt-m4b-player/qt-m4b-player/`. `--data-dir DIRECTORY` redirects all
@@ -44,34 +72,37 @@ unless overridden.
 | --- | --- |
 | `library.sqlite` | Books, listening progress, per-book CC / Stop After Chapter preferences and known file locations. |
 | `settings.ini` | Global appearance and desktop window preferences through Qt `QSettings`. |
-| `covers/` | Replaceable extracted artwork cache; artwork paths are not stored in the Qt database. |
+| `covers/` | Replaceable extracted artwork cache; artwork paths are not stored in the database. |
 
 Chapters and caption cues are read from the audiobook, not stored in SQLite.
 Caption indexing runs in the background and currently repeats when a book opens.
 
-### SQLite schema v1
+## SQLite schema v2
 
-[Library.cpp](../src/Library.cpp) creates these tables transactionally and sets
-`PRAGMA user_version = 1`:
+[Library.cpp](../src/Library.cpp) creates these tables transactionally and stamps
+`PRAGMA application_id = 0x4D344251` ("M4BQ") and `PRAGMA user_version = 2`:
 
 ```sql
 CREATE TABLE books (
-    fingerprint TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    author TEXT NOT NULL,
-    position REAL NOT NULL DEFAULT 0,
-    last_opened INTEGER NOT NULL,
-    captions INTEGER,
-    stop_after_chapter INTEGER,
-    rating INTEGER NOT NULL DEFAULT 0,
-    notes TEXT NOT NULL DEFAULT ''
-);
+    fingerprint        TEXT PRIMARY KEY,
+    title              TEXT,
+    author             TEXT,
+    position           REAL NOT NULL DEFAULT 0.0,
+    rating             INTEGER NOT NULL DEFAULT 0 CHECK (rating BETWEEN 0 AND 50),
+    notes              TEXT,
+    captions           INTEGER CHECK (captions IN (0, 1)),
+    stop_after_chapter INTEGER CHECK (stop_after_chapter IN (0, 1)),
+    last_opened        INTEGER NOT NULL
+) STRICT;
 
 CREATE TABLE book_locations (
-    path TEXT PRIMARY KEY,
-    fingerprint TEXT NOT NULL REFERENCES books(fingerprint),
-    last_seen INTEGER NOT NULL
-);
+    path        TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL REFERENCES books(fingerprint) ON DELETE CASCADE,
+    last_seen   INTEGER NOT NULL
+) STRICT;
+
+CREATE INDEX books_last_opened          ON books(last_opened DESC);
+CREATE INDEX book_locations_fingerprint ON book_locations(fingerprint);
 ```
 
 `position` is absolute book time in seconds. `last_opened` and `last_seen` are
@@ -80,60 +111,76 @@ a reused path can be reassigned to a different fingerprint.
 
 `captions` and `stop_after_chapter` use nullable integer booleans: `NULL` means
 unset, `0` disabled and `1` enabled. The current player falls back to disabled
-when either preference is unset. Progress saves preserve these preferences and
-the reserved rating/notes fields.
+when either preference is unset, and the NULL state is retained so a future
+global default can be distinguished from an explicit per-book "off".
 
-**A column does not imply a working feature:**
+`title`, `author` and `notes` are nullable. Missing metadata is stored as `NULL`
+and read back as an empty string. Absent metadata never overwrites metadata
+recorded earlier: re-opening a book whose tags cannot be read keeps the known
+title and author. Progress saves preserve the preference fields.
 
-- `rating` is reserved, with default `0`. Qt has no rating read/write API,
-  rating controls or enforced rating scale yet.
-- `notes` is reserved, with default empty text. Qt has no notes read/write API
-  or editor yet.
-- `review` does not exist in the Qt schema.
+**A column does not imply a working feature:** `rating` and `notes` are reserved.
+Qt has no rating or notes read/write API, no editor and no enforced rating scale.
+Values inserted through another tool survive normal progress and preference
+saves, but the app does not display them.
 
-The Qt library API currently returns listening position and playback preferences,
-not ratings or notes. Values inserted through another tool can remain in those
-reserved columns, but the Qt app does not display them.
+### Deliberate omissions
 
-There are no upgrades beyond schema v1. A database reporting a newer
-`user_version` is rejected. Automatic backups and recovery for schema upgrades
-have not been implemented.
+- **`position` has no `CHECK` constraint.** It is taken from the playback clock,
+  and a transient negative reading must not turn into a failed save.
+- **No `file_size` or `file_modified_at`.** The sampled fingerprint already
+  answers "is this the same book", and the app re-reads metadata on open anyway.
+- **`WITHOUT ROWID` is not used.** It would slightly shrink the TEXT-keyed
+  tables, but the row counts are tiny and the cost in clarity is not worth it.
 
-### Differences from the macOS schema
+### Robustness properties
 
-The macOS app uses GRDB over SQLite with named migrations. The reference schema
-has integer book/location IDs and a unique book fingerprint that can be null for
-legacy books awaiting identification. Qt uses fingerprints and paths as its keys.
+| Property | How it is provided |
+| --- | --- |
+| Type safety | `STRICT` tables reject a value of the wrong storage class |
+| Range safety | `CHECK` on `rating`, `captions` and `stop_after_chapter` |
+| Referential integrity | `PRAGMA foreign_keys = ON` on every connection, `ON DELETE CASCADE` from locations to books |
+| Query performance | Indexes behind the recents ordering and the location lookup |
+| Concurrency tolerance | `PRAGMA busy_timeout = 5000`; transactional progress writes |
+| Crash resilience | `journal_mode = WAL` with `synchronous = NORMAL`, which is corruption-safe; only the most recent transaction can be lost on a hard reset |
+| File identification | `application_id` rejects unrelated SQLite files before any write |
+| Upgrade safety | Timestamped backup before any migration; one transaction per step |
 
-| Data | macOS reference | Current Qt app |
-| --- | --- | --- |
-| Book primary key | Integer `books.id` | `books.fingerprint` |
-| Fingerprint | Unique `books.fingerprint`; nullable for legacy rows | `books.fingerprint`; supplied by the player on every saved book |
-| Title / author | Nullable text | Required text |
-| Listening position | `last_position` | `position` |
-| CC preference | `captions_enabled` | `captions` |
-| Stop After Chapter | Nullable `stop_after_chapter` | Nullable `stop_after_chapter` |
-| Rating | Integer tenths of a star, `0–50`; `0` unrated | Reserved integer; no implemented semantics or UI |
-| Notes | Nullable text, with editor and database API | Non-null text, default `''`; storage column only |
-| Review | Nullable `review` column and database API | Absent |
-| Artwork path | `cover_path` column | External cache; no column |
-| Location primary key | Integer `book_locations.id` | `book_locations.path` |
-| Location-to-book link | `book_id`, with cascading deletion | `fingerprint`, without cascading deletion |
-| File path | Unique `file_path` | Primary-key `path` |
-| File attributes | `file_size`, `file_modified_at` | Absent |
-| Opened / seen timestamps | GRDB datetime fields | Integer Unix epoch milliseconds |
-| Migration tracking | GRDB named migrations; backup before applicable upgrades | `PRAGMA user_version`; initial schema only |
+`WAL` creates `library.sqlite-wal` and `library.sqlite-shm` while the app runs.
+Copying only `library.sqlite` while the app is running can miss recent writes;
+`WAL` is also unsuitable if the data directory is placed on a network share.
 
-Source of the reference schema:
-`macos-m4b-player/Sources/m4b-player/AppDatabase.swift`.
+### Schema versions and migrations
 
-The database files are **not interchangeable**. A future importer must map keys
-and column names, decode timestamps, handle nullable metadata and resolve legacy
-rows. Compatible fingerprints allow matching already identified books; they do
-not automatically translate the remaining data. macOS file paths and artwork
-paths may also need replacement on Linux.
+| Version | Changes |
+| --- | --- |
+| 1 | Original prototype: non-`STRICT` tables, required `title`/`author`, `position`/`captions` column names, no cascading delete, no indexes. |
+| 2 | Current: `STRICT`, nullable metadata, `ON DELETE CASCADE`, indexes, `application_id`, WAL. |
 
-### Global preferences outside SQLite
+Opening a version 1 database upgrades it in place: `STRICT` and relaxed
+constraints cannot be expressed with `ALTER TABLE`, so both tables are rebuilt
+inside one transaction, preserving position, rating, notes, captions,
+stop-after-chapter and all locations. Empty strings in `title`, `author` and
+`notes` become `NULL`. The migration:
+
+1. Copies `library.sqlite` to
+   `library.sqlite.backup-before-migration-<yyyyMMdd-HHmmss>` and aborts if the
+   copy fails.
+2. Rebuilds both tables with `PRAGMA foreign_keys = OFF`, which is required —
+   dropping `books` with foreign keys enabled would cascade the locations away.
+3. Runs `PRAGMA foreign_key_check` before committing, and rolls back on any
+   violation.
+4. Restores `foreign_keys = ON` afterwards.
+
+A database reporting a `user_version` newer than the supported version is
+rejected. A database with a foreign `application_id` is rejected without being
+modified. A version 1 file is only accepted as legacy if it actually contains
+both expected tables.
+
+There is no automated recovery beyond the pre-migration backup, and no
+downgrade path.
+
+## Global preferences outside SQLite
 
 macOS uses SwiftUI `@AppStorage` backed by `UserDefaults`. Qt uses
 [AppPreferences](../src/AppPreferences.cpp) and
@@ -150,6 +197,16 @@ Caption size changes through either View or Appearance use the same saved value.
 CC enabled and Stop After Chapter remain per-book SQLite preferences.
 Window placement belongs to the desktop/window manager. Cover drag position,
 playback speed and volume are not persisted across app launches.
+
+## Recent books and fallback paths
+
+`recentBooks()` returns **one entry per logical book**, at its most recently seen
+location, ordered by `last_opened` descending. A book known under two paths (for
+example a local copy and a NAS copy) does not appear twice in the menu.
+
+`lastAvailablePath()` walks every known location of the most recently opened
+books and returns the first one that still exists, so a deleted copy falls back
+to another path of the same book.
 
 ## Implemented Qt features
 
@@ -172,27 +229,25 @@ playback speed and volume are not persisted across app launches.
 
 | Feature | Current gap |
 | --- | --- |
-| Ratings | No star control, popover, display or persistence API. Preserve the macOS `0–50` tenths representation if rating compatibility is adopted. |
-| Notes | No editor, display or persistence API. The macOS editor binds to a logical book ID so saving after switching books updates the correct book; Qt needs an equivalent ownership rule. |
-| Review data | No schema field or API. This is a schema gap; the macOS reference's separate notes editor is already a user-visible feature. |
+| Ratings | No star control, popover, display or persistence API. The column is reserved. |
+| Notes | No editor, display or persistence API. The column is reserved; an editor must bind to a logical book, not to whatever is currently playing. |
 | Precise Stop After Chapter | Qt observes the audio clock, pauses and seeks back to the boundary. Brief next-chapter audio is possible. The macOS engine enforces a playback endpoint before the notification. |
 | Independent player windows | Qt has one window/session. Opening another book replaces it; macOS supports independent windows and focused-player coordination. |
 | Drag-and-drop opening | No audiobook drop target or drag overlay in Qt. |
 | Desktop open routing | A basic desktop entry accepts a file argument, but forwarding opens to an existing process/window is not implemented. |
 | More global preferences | No configurable playback-rate list, default Stop After Chapter, auto-resume preference, general player font size or custom foreground/background colors. |
-| File identity bookkeeping | Qt does not store file size/modification time or implement the macOS legacy-row identity/duplicate-merge migration behavior. |
-| Database interoperability | No macOS import/export, schema alignment or cross-platform synchronization. |
-| Schema upgrade protection | No automatic migration backup or tested upgrade/recovery path beyond initial schema creation. |
+| Caption index cache | Caption indexes are not cached; indexing a large book can delay CC availability. |
+| Database recovery | Only the automatic pre-migration backup exists; there is no restore UI or downgrade path. |
+| macOS interoperability | Explicitly out of scope, by the scope decision above. |
 
 ### Additional platform and validation work
 
-These are port milestones, not all missing macOS user features:
+These are port milestones, not missing macOS user features:
 
 - Linux MPRIS/media-key/desktop playback integration is not implemented.
 - Android builds, packaging, document access, background playback service,
   audio focus and headset/lock-screen integration are not implemented. CMake
   currently rejects Android builds explicitly.
-- Caption indexes are not cached; indexing a large book can delay CC availability.
 - Disconnected/stalled NAS handling and broader codec/edit-list/language coverage
   still need hardening and validation.
 - Full keyboard/screen-reader coverage and audible seek, pitch and chapter-cutoff
@@ -202,12 +257,11 @@ These are port milestones, not all missing macOS user features:
 
 ## Follow-up decisions
 
-Before implementing ratings/notes, choose whether to retain Qt's schema with an
-explicit importer or align it with the macOS logical-book/location model. Existing
-Qt progress and preferences must survive any change. Preserve rating units,
-nullable preference semantics and notes ownership deliberately rather than
-treating the reserved columns as completed features.
+The storage shape is settled: Qt-native, `STRICT`, fingerprint-keyed, with
+reserved rating and notes columns. Open items are behavioural, not schema-level:
 
-Schema-changing work should include a consistent SQLite backup, a transactional
-migration and recovery validation. None of those follow-ups is implemented merely
-by adding this document.
+- Ratings and notes need APIs and UI that bind to a logical book, and the rating
+  scale (`0–50` tenths of a star, `0` unrated) should be enforced in code if the
+  reserve is ever populated.
+- If a global "default Stop After Chapter" or "default CC" preference is added,
+  the existing `NULL` versus `0` distinction already supports inheriting it.
