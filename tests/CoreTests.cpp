@@ -1,10 +1,71 @@
 #include "Library.h"
 #include "MediaData.h"
 #include "MetadataReader.h"
+#include <QDir>
 #include <QFile>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
 #include <QTemporaryDir>
+#include <QUuid>
+#include <QVariant>
 #include <QtTest>
+#include <exception>
 #include <limits>
+
+namespace {
+
+/// Second connection to the same file, used to inspect the schema and to prove
+/// constraints that the Library API deliberately does not expose.
+class RawDatabase {
+public:
+    explicit RawDatabase(const QString &path)
+        : m_name(QUuid::createUuid().toString()),
+          m_database(QSqlDatabase::addDatabase("QSQLITE", m_name))
+    {
+        m_database.setDatabaseName(path);
+        m_open = m_database.open();
+    }
+    ~RawDatabase()
+    {
+        m_database.close();
+        m_database = QSqlDatabase();
+        QSqlDatabase::removeDatabase(m_name);
+    }
+    bool isOpen() const { return m_open; }
+    bool exec(const QString &sql)
+    {
+        QSqlQuery query(m_database);
+        return query.exec(sql);
+    }
+    QVariant scalar(const QString &sql)
+    {
+        QSqlQuery query(m_database);
+        if (!query.exec(sql) || !query.next())
+            return {};
+        return query.value(0);
+    }
+
+private:
+    QString m_name;
+    QSqlDatabase m_database;
+    bool m_open = false;
+};
+
+/// The version 1 schema exactly as it shipped, for upgrade testing.
+bool createVersionOneLibrary(RawDatabase &raw)
+{
+    return raw.exec("CREATE TABLE books (fingerprint TEXT PRIMARY KEY, title TEXT NOT NULL, "
+                    "author TEXT NOT NULL, position REAL NOT NULL DEFAULT 0, "
+                    "last_opened INTEGER NOT NULL, captions INTEGER, stop_after_chapter INTEGER, "
+                    "rating INTEGER NOT NULL DEFAULT 0, notes TEXT NOT NULL DEFAULT '')")
+        && raw.exec("CREATE TABLE book_locations (path TEXT PRIMARY KEY, "
+                    "fingerprint TEXT NOT NULL REFERENCES books(fingerprint), "
+                    "last_seen INTEGER NOT NULL)")
+        && raw.exec("PRAGMA user_version = 1");
+}
+
+} // namespace
 
 class CoreTests : public QObject {
     Q_OBJECT
@@ -100,7 +161,14 @@ private slots:
         QCOMPARE(state.position, 4.5);
         QCOMPARE(state.captions.value(), true);
         QCOMPARE(state.stopAfterChapter.value(), true);
-        QCOMPARE(library.recentBooks().size(), 2);
+
+        // One logical book with two known paths is a single recent entry, at
+        // the most recently seen location.
+        const auto recents = library.recentBooks();
+        QCOMPARE(recents.size(), 1);
+        QCOMPARE(recents.first().toMap()["path"].toString(), copy);
+
+        // Removing that copy falls back to the other path of the same book.
         QVERIFY(QFile::remove(copy));
         QCOMPARE(library.lastAvailablePath(), first);
     }
@@ -125,6 +193,122 @@ private slots:
         QCOMPARE(restored.captions.value(), true);
         QCOMPARE(restored.stopAfterChapter.value(), false);
         QVERIFY(!reopened.sqliteVersion().isEmpty());
+    }
+    void missingMetadataIsAccepted()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+
+        // A book with no title or artist tag must save, not fail a NOT NULL check.
+        library.saveProgress("quick:v1:bare", "/books/bare.m4b", QString(), QString(), 1.0);
+        const auto initial = library.recentBooks().first().toMap();
+        QCOMPARE(initial["title"].toString(), QString());
+        QCOMPARE(initial["author"].toString(), QString());
+
+        // Real metadata fills the gap, and a later open without it must not
+        // erase what was learned earlier.
+        library.saveProgress("quick:v1:bare", "/books/bare.m4b", "Real title", "Real author", 2.0);
+        library.saveProgress("quick:v1:bare", "/books/bare.m4b", QString(), QString(), 3.0);
+        const auto updated = library.recentBooks().first().toMap();
+        QCOMPARE(updated["title"].toString(), QString("Real title"));
+        QCOMPARE(updated["author"].toString(), QString("Real author"));
+    }
+    void migratesVersionOneLibrary()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = directory.filePath("library.sqlite");
+        {
+            RawDatabase raw(path);
+            QVERIFY(raw.isOpen());
+            QVERIFY(createVersionOneLibrary(raw));
+            QVERIFY(raw.exec("INSERT INTO books VALUES ('quick:v1:legacy', 'Old title', '', 42.5, "
+                             "1700000000000, 1, NULL, 30, 'a note')"));
+            QVERIFY(raw.exec("INSERT INTO book_locations VALUES ('/books/old.m4b', "
+                             "'quick:v1:legacy', 1700000000001)"));
+        }
+
+        Library library(path);
+        const auto state = library.find("quick:v1:legacy");
+        QCOMPARE(state.position, 42.5);
+        QCOMPARE(state.captions.value(), true);
+        QVERIFY(!state.stopAfterChapter.has_value());
+
+        const auto recents = library.recentBooks();
+        QCOMPARE(recents.size(), 1);
+        const auto book = recents.first().toMap();
+        QCOMPARE(book["title"].toString(), QString("Old title"));
+        QCOMPARE(book["author"].toString(), QString());
+        QCOMPARE(book["path"].toString(), QString("/books/old.m4b"));
+
+        QVERIFY(!QDir(directory.path()).entryList(QStringList{"library.sqlite.backup-before-migration-*"}).isEmpty());
+
+        RawDatabase raw(path);
+        QVERIFY(raw.isOpen());
+        QCOMPARE(raw.scalar("PRAGMA user_version").toInt(), 2);
+        QCOMPARE(raw.scalar("PRAGMA application_id").toInt(), 0x4D344251);
+        QCOMPARE(raw.scalar("SELECT rating FROM books").toInt(), 30);
+        QCOMPARE(raw.scalar("SELECT notes FROM books").toString(), QString("a note"));
+        QVERIFY(raw.scalar("SELECT author IS NULL FROM books").toBool());
+        QVERIFY(raw.scalar("SELECT sql FROM sqlite_master WHERE name = 'books'").toString().contains("STRICT"));
+        QCOMPARE(raw.scalar("SELECT COUNT(*) FROM sqlite_master WHERE name IN "
+                            "('books_last_opened', 'book_locations_fingerprint')").toInt(), 2);
+    }
+    void rejectsForeignDatabase()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("library.sqlite");
+        {
+            // Valid SQLite, valid user_version, but not our schema.
+            RawDatabase raw(path);
+            QVERIFY(raw.isOpen());
+            QVERIFY(raw.exec("CREATE TABLE something (x TEXT)"));
+            QVERIFY(raw.exec("PRAGMA user_version = 1"));
+        }
+        bool rejected = false;
+        QString message;
+        try {
+            Library library(path);
+        } catch (const std::exception &error) {
+            rejected = true;
+            message = QString::fromUtf8(error.what());
+        }
+        QVERIFY2(rejected, "a foreign SQLite file must not be opened as a library");
+        QVERIFY2(message.contains("Not a qt-m4b-player library database"), qPrintable(message));
+
+        RawDatabase raw(path);
+        QVERIFY(raw.isOpen());
+        QCOMPARE(raw.scalar("SELECT COUNT(*) FROM sqlite_master WHERE name = 'something'").toInt(), 1);
+        QCOMPARE(raw.scalar("PRAGMA user_version").toInt(), 1);
+    }
+    void locationsCascadeAndConstraints()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("library.sqlite");
+        {
+            Library library(path);
+            library.saveProgress("quick:v1:a", "/books/a.m4b", "A", "Author", 1.0);
+        }
+        {
+            // Deleting the book removes its locations only with foreign keys on.
+            RawDatabase raw(path);
+            QVERIFY(raw.isOpen());
+            QVERIFY(raw.exec("PRAGMA foreign_keys = ON"));
+            QVERIFY(raw.exec("DELETE FROM books WHERE fingerprint = 'quick:v1:a'"));
+            QCOMPARE(raw.scalar("SELECT COUNT(*) FROM book_locations").toInt(), 0);
+        }
+        {
+            Library library(path);
+            library.saveProgress("quick:v1:b", "/books/b.m4b", "B", "Author", 1.0);
+        }
+        {
+            RawDatabase raw(path);
+            QVERIFY(raw.isOpen());
+            QVERIFY(!raw.exec("UPDATE books SET captions = 5"));
+            QVERIFY(!raw.exec("UPDATE books SET rating = 99"));
+            QVERIFY(!raw.exec("UPDATE books SET captions = 'yes'"));
+            QVERIFY(raw.exec("UPDATE books SET captions = 0, rating = 50"));
+        }
     }
 };
 QTEST_GUILESS_MAIN(CoreTests)
