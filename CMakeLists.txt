@@ -53,6 +53,9 @@ qt_add_resources(qt-m4b-player transport-icons
     PREFIX "/icons" BASE "assets/icons" FILES ${TRANSPORT_ICON_FILES})
 qt_add_resources(qt-m4b-player third-party-notices
     PREFIX "/licenses" BASE "assets/icons" FILES assets/icons/LICENSE.phosphor)
+qt_add_resources(qt-m4b-player application-icon
+    PREFIX "/app-icon" BASE "packaging/icons/512x512"
+    FILES packaging/icons/512x512/io.github.amb.QtM4bPlayer.png)
 target_link_libraries(qt-m4b-player PRIVATE player-core Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
 target_compile_options(qt-m4b-player PRIVATE -Wall -Wextra -Wpedantic)
 
@@ -105,8 +108,7 @@ endif()
 install(TARGETS qt-m4b-player RUNTIME DESTINATION bin)
 install(FILES packaging/io.github.amb.QtM4bPlayer.desktop DESTINATION share/applications)
 install(FILES packaging/flatpak/io.github.amb.QtM4bPlayer.metainfo.xml DESTINATION share/metainfo)
-install(FILES packaging/icons/io.github.amb.QtM4bPlayer.svg
-        DESTINATION share/icons/hicolor/scalable/apps)
+# Flatpak exports accept raster icons up to 512x512; keep the 1024px master in source.
 foreach(icon_size 16 32 48 64 128 256 512)
     install(FILES packaging/icons/${icon_size}x${icon_size}/io.github.amb.QtM4bPlayer.png
             DESTINATION share/icons/hicolor/${icon_size}x${icon_size}/apps)

@@ -6,6 +6,7 @@
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QLibraryInfo>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -45,6 +46,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("qt-m4b-player");
     QCoreApplication::setApplicationVersion("0.2.0");
     QGuiApplication::setDesktopFileName(QStringLiteral("io.github.amb.QtM4bPlayer"));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/app-icon/io.github.amb.QtM4bPlayer.png")));
     // Do not pin Qt's Basic style: it ignores the platform palette. Respect an
     // explicit QT_QUICK_CONTROLS_STYLE override, otherwise adopt the KDE Quick
     // Controls style when the platform provides one so the UI follows the
