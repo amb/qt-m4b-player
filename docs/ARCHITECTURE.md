@@ -43,6 +43,15 @@ spaces/arrows and Ctrl+S cannot control playback.
 The transport star opens the shared rating/notes popup. Rating writes update
 only the active book's rating in half-star steps; the popup closes on book
 replacement and suppresses transport shortcuts while its star slider has focus.
+Chapters, rating/notes, speed and volume share `TransportPopup`: the native theme
+surface, identical padding, dimming and transitions, and an 8 px gap
+above the invoking button. Popup height is bounded by the space above that
+button; chapter/speed lists scroll instead of covering it. Qt's popup positioner
+clamps horizontal placement, and resizing/reflow updates the available space.
+Only one utility popup stays open. Escape/outside press dismisses all four in
+the same way, consumes the outside click, and restores trigger focus unless a
+separate Notes/EQ window is active. Transport shortcuts are suppressed for every
+utility popup, so list/slider keyboard actions cannot seek or pause the book.
 
 EQ settings belong to the playback session and survive book replacement. The
 reference first-order tilt coefficients are applied through libmpv's lavfi

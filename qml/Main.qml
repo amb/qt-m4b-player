@@ -11,6 +11,8 @@ ApplicationWindow {
     required property AppPreferences preferences
     readonly property bool wideControls: width >= 740
     readonly property var playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+    readonly property bool utilityPopupOpen: chapterSheet.visible || ratingPopup.visible || speedPopup.visible || volumePopup.visible
+    property url popupBookUrl
     // Follow the platform colour scheme; the application ships no palette of its own.
     color: palette.window
     width: 520
@@ -43,6 +45,22 @@ ApplicationWindow {
         return (hours ? hours + ":" + String(minutes).padStart(2, "0") : minutes) + ":" + String(secs).padStart(2, "0")
     }
 
+    function closeUtilityPopups(exceptPopup: var): void {
+        for (let popup of [chapterSheet, ratingPopup, speedPopup, volumePopup])
+            if (popup !== exceptPopup) popup.close()
+    }
+    function prepareUtilityPopup(popup: var): void {
+        closeUtilityPopups(popup)
+        popupBookUrl = window.player.fileUrl
+    }
+    Connections {
+        target: window.player
+        function onStateChanged() {
+            if (window.utilityPopupOpen && window.popupBookUrl !== window.player.fileUrl)
+                window.closeUtilityPopups(null)
+        }
+    }
+
     FileDialog {
         id: fileDialog
         title: "Open audiobook"
@@ -53,48 +71,48 @@ ApplicationWindow {
         id: openAction
         text: "&Open Audiobook…"
         shortcut: StandardKey.Open
-        onTriggered: fileDialog.open()
+        onTriggered: { window.closeUtilityPopups(null); fileDialog.open() }
     }
     Action {
         id: playAction
         text: window.player.playing ? "&Pause" : "&Play"
         shortcut: "Space"
-        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible
+        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen
         onTriggered: window.player.togglePlayback()
     }
     Action {
         id: stopAction
         text: "&Stop and Return to Chapter Start"
         shortcut: "Ctrl+S"
-        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible
+        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen
         onTriggered: window.player.stop()
     }
     Action {
         id: previousAction
         text: "&Previous Chapter"
         shortcut: "Ctrl+Left"
-        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible && window.player.currentChapter > 0
+        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen && window.player.currentChapter > 0
         onTriggered: window.player.navigateChapter(-1)
     }
     Action {
         id: nextAction
         text: "&Next Chapter"
         shortcut: "Ctrl+Right"
-        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible && window.player.currentChapter + 1 < window.player.chapters.length
+        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen && window.player.currentChapter + 1 < window.player.chapters.length
         onTriggered: window.player.navigateChapter(1)
     }
     Action {
         id: backAction
         text: "&Back 10 Seconds"
         shortcut: "Left"
-        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible
+        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen
         onTriggered: window.player.skip(-10)
     }
     Action {
         id: forwardAction
         text: "&Forward 10 Seconds"
         shortcut: "Right"
-        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible
+        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen
         onTriggered: window.player.skip(10)
     }
     Action {
@@ -129,10 +147,11 @@ ApplicationWindow {
     Action {
         id: notesAction
         text: "&Notes…"
-        shortcut: "Ctrl+N"
+        // The popup owns this shortcut while open; avoid registering it twice.
+        shortcut: ratingPopup.visible ? "" : "Ctrl+N"
         enabled: window.player.notesAvailable
         onTriggered: {
-            ratingPopup.close()
+            window.closeUtilityPopups(null)
             notesEditor.openDocument(window.player.notesForEditing())
         }
     }
@@ -145,8 +164,8 @@ ApplicationWindow {
     Action {
         id: equalizerAction
         text: "Open &EQ…"
-        shortcut: "Ctrl+E"
-        onTriggered: equalizerWindow.openPanel()
+        shortcut: volumePopup.visible ? "" : "Ctrl+E"
+        onTriggered: { window.closeUtilityPopups(null); equalizerWindow.openPanel() }
     }
     Action {
         id: fillCoverAction
@@ -159,7 +178,7 @@ ApplicationWindow {
         id: appearanceAction
         text: "&Appearance…"
         shortcut: "Ctrl+,"
-        onTriggered: settings.open()
+        onTriggered: { window.closeUtilityPopups(null); settings.open() }
     }
     Action {
         id: fullScreenAction
@@ -241,7 +260,7 @@ ApplicationWindow {
             MenuCommand {
                 action: Action {
                     text: "&Increase Volume"
-                    enabled: !notesEditor.visible
+                    enabled: !notesEditor.visible && !window.utilityPopupOpen
                     shortcut: "Ctrl+Up"
                     onTriggered: window.player.setVolume(Math.min(100, window.player.volume + 5))
                 }
@@ -249,7 +268,7 @@ ApplicationWindow {
             MenuCommand {
                 action: Action {
                     text: "&Decrease Volume"
-                    enabled: !notesEditor.visible
+                    enabled: !notesEditor.visible && !window.utilityPopupOpen
                     shortcut: "Ctrl+Down"
                     onTriggered: window.player.setVolume(Math.max(0, window.player.volume - 5))
                 }
@@ -472,13 +491,14 @@ ApplicationWindow {
                         objectName: "secondaryTransport"
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 4
-                        TransportButton { action: chaptersAction; iconName: "chapters"; description: "Chapters" }
+                        TransportButton { id: chaptersButton; objectName: "chaptersButton"; action: chaptersAction; iconName: "chapters"; description: "Chapters"; popupOpen: chapterSheet.visible }
                         TransportButton { action: stopAfterAction; iconName: "stopAfter"; description: "Stop after chapter" }
                         TransportButton { action: captionsAction; text: "CC"; description: window.player.indexingCaptions ? "Indexing captions" : "Embedded captions"; font.pixelSize: 17; font.bold: true }
                         TransportButton {
                             id: ratingButton
                             objectName: "ratingButton"
                             action: ratingAction
+                            popupOpen: ratingPopup.visible
                             description: window.player.rating === 0 ? "Rating and notes: unrated"
                                 : "Rating and notes: " + (window.player.rating / 10).toFixed(1) + " out of 5 stars"
                             contentItem: Item {
@@ -490,54 +510,72 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        TransportButton { text: window.player.speed + "×"; description: "Playback speed"; enabled: window.player.loaded; onClicked: speedMenu.open() }
-                        TransportButton { id: volumeButton; objectName: "volumeButton"; action: volumeAction; iconName: "volume"; description: "Volume" }
+                        TransportButton { id: speedButton; objectName: "speedButton"; text: window.player.speed + "×"; description: "Playback speed"; enabled: window.player.loaded; popupOpen: speedPopup.visible; onClicked: speedPopup.open() }
+                        TransportButton { id: volumeButton; objectName: "volumeButton"; action: volumeAction; iconName: "volume"; description: "Volume"; popupOpen: volumePopup.visible }
                     }
                 }
             }
         }
     }
 
-    Menu {
-        id: speedMenu
-        x: (window.width - width) / 2
-        y: window.contentItem.height - height - 100
-        Repeater {
-            model: window.playbackRates
-            MenuItem {
-                required property real modelData
-                text: modelData + "×"
-                checkable: true
-                checked: Math.abs(window.player.speed - modelData) < 0.001
-                onTriggered: window.player.setSpeed(modelData)
+    TransportPopup {
+        id: speedPopup
+        objectName: "speedPopup"
+        anchorItem: speedButton
+        boundsItem: window.contentItem
+        palette: window.palette
+        onAboutToShow: window.prepareUtilityPopup(speedPopup)
+        onOpened: {
+            speedList.currentIndex = Math.max(0, window.playbackRates.indexOf(window.player.speed))
+            speedList.positionViewAtIndex(speedList.currentIndex, ListView.Contain)
+            speedList.forceActiveFocus()
+        }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label { text: "Playback speed"; font.pixelSize: 18 }
+            ListView {
+                id: speedList
+                objectName: "speedList"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 0
+                Layout.preferredHeight: window.playbackRates.length * 44
+                clip: true
+                keyNavigationEnabled: true
+                boundsBehavior: Flickable.StopAtBounds
+                model: window.playbackRates
+                ScrollBar.vertical: ScrollBar {}
+                function chooseCurrent(): void {
+                    if (currentIndex < 0) return
+                    window.player.setSpeed(window.playbackRates[currentIndex])
+                    speedPopup.close()
+                }
+                Keys.onReturnPressed: chooseCurrent()
+                Keys.onEnterPressed: chooseCurrent()
+                delegate: ItemDelegate {
+                    required property real modelData
+                    required property int index
+                    width: ListView.view.width
+                    height: 44
+                    text: (Math.abs(window.player.speed - modelData) < 0.001 ? "✓  " : "") + modelData + "×"
+                    highlighted: ListView.isCurrentItem
+                    onClicked: { window.player.setSpeed(modelData); speedPopup.close() }
+                }
             }
         }
     }
-    Popup {
+    TransportPopup {
         id: ratingPopup
         objectName: "ratingPopup"
-        parent: Overlay.overlay
-        width: 240
-        modal: true
-        focus: true
-        property url bookUrl
-        onAboutToShow: {
-            bookUrl = window.player.fileUrl
-            let point = ratingButton.mapToItem(Overlay.overlay, 0, 0)
-            x = Math.max(8, Math.min(window.width - width - 8, point.x + (ratingButton.width - width) / 2))
-            y = Math.max(8, point.y - height - 8)
-        }
+        anchorItem: ratingButton
+        boundsItem: window.contentItem
+        palette: window.palette
+        onAboutToShow: window.prepareUtilityPopup(ratingPopup)
         onOpened: ratingSlider.forceActiveFocus()
-        onClosed: if (!notesEditor.visible) ratingButton.forceActiveFocus()
-        Connections {
-            target: window.player
-            function onStateChanged() {
-                if (ratingPopup.visible && (!window.player.notesAvailable || ratingPopup.bookUrl !== window.player.fileUrl))
-                    ratingPopup.close()
-            }
-        }
+        Shortcut { sequence: "Ctrl+N"; enabled: ratingPopup.opened; onActivated: notesAction.trigger() }
         contentItem: ColumnLayout {
-            spacing: 10
+            spacing: 12
+            Label { text: "Rating and notes"; font.pixelSize: 18 }
             Slider {
                 id: ratingSlider
                 objectName: "ratingSlider"
@@ -573,13 +611,14 @@ ApplicationWindow {
                                 anchors.centerIn: parent
                                 width: 28; height: 28
                                 fraction: Math.max(0, Math.min(1, window.player.rating / 10 - ratingStar.index))
-                                color: ratingSlider.activeFocus ? ratingSlider.palette.highlight : ratingSlider.palette.buttonText
+                                color: ratingSlider.activeFocus ? ratingSlider.palette.highlight : ratingValueLabel.color
                             }
                         }
                     }
                 }
             }
             Label {
+                id: ratingValueLabel
                 Layout.alignment: Qt.AlignHCenter
                 text: window.player.rating === 0 ? "Unrated" : (window.player.rating / 10).toFixed(1) + " / 5"
             }
@@ -591,50 +630,67 @@ ApplicationWindow {
             }
         }
     }
-    Popup {
+    TransportPopup {
         id: volumePopup
         objectName: "volumePopup"
-        parent: Overlay.overlay
-        width: 300
-        modal: true
-        focus: true
-        onAboutToShow: {
-            let point = volumeButton.mapToItem(Overlay.overlay, 0, 0)
-            x = Math.max(8, Math.min(window.width - width - 8, point.x + (volumeButton.width - width) / 2))
-            y = Math.max(8, point.y - height - 8)
-        }
+        anchorItem: volumeButton
+        boundsItem: window.contentItem
+        palette: window.palette
+        onAboutToShow: window.prepareUtilityPopup(volumePopup)
+        onOpened: volumeSlider.forceActiveFocus()
+        Shortcut { sequence: "Ctrl+E"; enabled: volumePopup.opened; onActivated: equalizerAction.trigger() }
         contentItem: ColumnLayout {
-            Label { text: "Volume" }
-            Slider { Layout.fillWidth: true; from: 0; to: 100; value: window.player.volume; Accessible.name: "Volume"; onMoved: window.player.setVolume(value) }
-            Button { action: equalizerAction; text: "Open EQ (Ctrl+E)"; onClicked: volumePopup.close() }
+            spacing: 12
+            Label { text: "Volume"; font.pixelSize: 18 }
+            Slider { id: volumeSlider; objectName: "volumeSlider"; Layout.fillWidth: true; from: 0; to: 100; stepSize: 1; value: window.player.volume; Accessible.name: "Volume"; onMoved: window.player.setVolume(value) }
+            Button { action: equalizerAction; text: "Open EQ (Ctrl+E)" }
         }
     }
-    Popup {
+    TransportPopup {
         id: chapterSheet
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(window.width - 32, 480)
-        height: Math.min(window.height - 120, 500)
-        modal: true
-        focus: true
-        ColumnLayout {
-            anchors.fill: parent
-            Label { text: "Chapters"; font.pixelSize: 22 }
+        objectName: "chapterSheet"
+        anchorItem: chaptersButton
+        boundsItem: window.contentItem
+        palette: window.palette
+        preferredWidth: 420
+        onAboutToShow: window.prepareUtilityPopup(chapterSheet)
+        onOpened: {
+            chapterList.currentIndex = Math.max(0, window.player.currentChapter)
+            chapterList.positionViewAtIndex(chapterList.currentIndex, ListView.Contain)
+            chapterList.forceActiveFocus()
+        }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label { text: "Chapters"; font.pixelSize: 18 }
             ListView {
+                id: chapterList
+                objectName: "chapterList"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.minimumHeight: 0
+                Layout.preferredHeight: Math.min(440, window.player.chapters.length * 44)
                 clip: true
+                keyNavigationEnabled: true
+                boundsBehavior: Flickable.StopAtBounds
                 model: window.player.chapters
                 ScrollBar.vertical: ScrollBar {}
+                function chooseCurrent(): void {
+                    if (currentIndex < 0) return
+                    window.player.selectChapter(currentIndex)
+                    chapterSheet.close()
+                }
+                Keys.onReturnPressed: chooseCurrent()
+                Keys.onEnterPressed: chooseCurrent()
                 delegate: ItemDelegate {
                     required property var modelData
                     required property int index
                     width: ListView.view.width
+                    height: 44
                     text: (index === window.player.currentChapter ? "▶  " : "") + modelData.title
-                    highlighted: index === window.player.currentChapter
+                    highlighted: ListView.isCurrentItem
                     onClicked: { window.player.selectChapter(index); chapterSheet.close() }
                 }
             }
-            Button { text: "Close"; onClicked: chapterSheet.close() }
         }
     }
     Popup {

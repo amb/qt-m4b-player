@@ -30,6 +30,8 @@
       <li>Embedded mov_text captions with audio-timed auto-scrolling</li>
       <li>Pitch-preserving playback speed and volume control</li>
       <li>Recent locations and saved resume positions</li>
+      <li>Per-book notes and half-star ratings</li>
+      <li>Speech equalizer, protected volume boost and chapter loudness correction</li>
       <li>Follows the desktop (KDE Plasma) colour scheme</li>
     </ul>
     <p>Playback never modifies the audiobook files.</p>
@@ -54,6 +56,17 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.2.0" date="2026-10-29">
+      <description>
+        <ul>
+          <li>Add per-book notes and half-star ratings.</li>
+          <li>Add a speech equalizer with tone, frequency and protected boost controls.</li>
+          <li>Measure chapters longer than one minute for automatic loudness correction to -18 LKFS.</li>
+          <li>Add a blurred artwork background to the transport controls.</li>
+          <li>Unify chapter, rating, playback speed and volume popups.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-10-16">
       <description>
         <p>First Linux prototype release.</p>

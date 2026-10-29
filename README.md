@@ -42,7 +42,7 @@ the exact Qt schema and the current feature gaps.
 
 ## Install the Flatpak
 
-[v0.1.0](https://github.com/amb/qt-m4b-player/releases/tag/v0.1.0) is the first
+[v0.2.0](https://github.com/amb/qt-m4b-player/releases/tag/v0.2.0) is the latest
 published Linux x86_64 release. Download `io.github.amb.QtM4bPlayer.flatpak`
 from that release, then run the following from the download directory with
 Flatpak installed:
@@ -55,6 +55,13 @@ flatpak run io.github.amb.QtM4bPlayer
 ```
 
 The app is distributed through GitHub releases; Flathub supplies the KDE runtime.
+To update an existing installation, close the player, download the new bundle and run:
+
+```bash
+flatpak install --user --reinstall ./io.github.amb.QtM4bPlayer.flatpak
+```
+
+GitHub releases do not provide automatic Flatpak updates.
 Books in your home directory are accessible by default. For books on another
 mount, grant access to that directory, for example:
 
@@ -103,6 +110,11 @@ The menu bar provides File, Playback, View and Help menus, including speed, volu
 chapters, captions, appearance and full screen. Space toggles playback; Left/Right
 skip ten seconds; Ctrl+Left/Right changes chapters. **Help → Player Help** lists
 the shortcuts. The lower transport controls provide the same playback actions.
+Chapters, rating/notes, playback speed and volume use matching popups above their
+buttons, with the same background dimming and active-button highlight. Escape or
+an outside click dismisses a popup; long lists scroll to stay within the window.
+Use Up/Down and Enter to choose a chapter or speed. Rating and volume adjustments
+stay open, and their arrow keys do not seek playback.
 Click the **star** in the transport controls for half-star ratings and
 **Open notes**. Left/Right changes the rating by half a star; Home clears it.
 **File → Notes** or Ctrl+N also opens the current book's plain-text notes; Ctrl+S saves

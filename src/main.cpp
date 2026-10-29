@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
     std::setlocale(LC_NUMERIC, "C");
     QCoreApplication::setOrganizationName("qt-m4b-player");
     QCoreApplication::setApplicationName("qt-m4b-player");
-    QCoreApplication::setApplicationVersion("0.1.0");
+    QCoreApplication::setApplicationVersion("0.2.0");
     QGuiApplication::setDesktopFileName(QStringLiteral("io.github.amb.QtM4bPlayer"));
     // Do not pin Qt's Basic style: it ignores the platform palette. Respect an
     // explicit QT_QUICK_CONTROLS_STYLE override, otherwise adopt the KDE Quick

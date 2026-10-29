@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(qt-m4b-player VERSION 0.1.0 LANGUAGES CXX)
+project(qt-m4b-player VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,7 +39,7 @@ target_link_libraries(media-inspect PRIVATE player-core)
 qt_add_executable(qt-m4b-player src/main.cpp src/WindowPreferences.h src/WindowPreferences.cpp
     src/TransportIconProvider.h src/TransportIconProvider.cpp)
 set(PLAYER_QML_FILES qml/Main.qml qml/TransportButton.qml qml/TransportIcon.qml qml/MenuCommand.qml
-    qml/CoverArtwork.qml qml/ProgressHeader.qml qml/InfoPopup.qml qml/NotesEditor.qml qml/EqualizerWindow.qml qml/StarIcon.qml)
+    qml/CoverArtwork.qml qml/ProgressHeader.qml qml/InfoPopup.qml qml/NotesEditor.qml qml/EqualizerWindow.qml qml/StarIcon.qml qml/TransportPopup.qml)
 qt_add_qml_module(qt-m4b-player
     URI AudiobookPlayer
     VERSION 1.0

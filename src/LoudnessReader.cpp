@@ -183,7 +183,7 @@ LoudnessResult LoudnessReader::read(const QString &path, double start, double en
         bool complete = false;
         double nextTime = start > 0 ? std::numeric_limits<double>::quiet_NaN() : 0;
         const auto decode = [&] {
-            int status;
+            int status = AVERROR(EAGAIN);
             while (!cancel->load() && !complete && (status = avcodec_receive_frame(decoder.value, frame.value)) >= 0) {
                 // Raw mono/stereo streams can omit speaker labels. Filters
                 // address named channels, so supply their conventional layout,

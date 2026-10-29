@@ -7,8 +7,9 @@ Button {
     property string iconName: ""
     // Marks a button drawn on the highlight colour, e.g. the primary action.
     property bool emphasized: false
+    property bool popupOpen: false
     readonly property color foregroundColor: !control.enabled ? control.palette.placeholderText
-        : (control.checked || control.emphasized) ? control.palette.highlightedText
+        : (control.checked || control.emphasized || control.popupOpen) ? control.palette.highlightedText
         : control.palette.buttonText
     implicitWidth: 48
     implicitHeight: 48
@@ -19,7 +20,7 @@ Button {
     background: Rectangle {
         radius: 12
         color: control.down ? Qt.darker(control.palette.button, 1.15)
-            : control.checked ? control.palette.highlight
+            : (control.checked || control.popupOpen) ? control.palette.highlight
             : control.hovered ? control.palette.button
             : "transparent"
         border.color: control.activeFocus ? control.palette.highlight : "transparent"

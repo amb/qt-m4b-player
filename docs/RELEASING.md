@@ -1,7 +1,7 @@
 # Releasing qt-m4b-player
 
-Releases are **self-hosted**: a version tag on GitHub produces one Linux Flatpak
-bundle attached to a GitHub release. Nothing is submitted to Flathub, a PPA or
+Releases are **self-hosted**: build a Linux Flatpak bundle locally and attach it
+to a tagged GitHub release. Tags do not trigger a CI build. Nothing is submitted to Flathub, a PPA or
 another distribution channel.
 
 The same source still installs with plain CMake (`cmake --install`) for people
@@ -73,22 +73,26 @@ task-manager entry resolve (no generic "?" icon).
 ## Publish
 
 Releases are published with the [GitHub CLI](https://cli.github.com) rather than
-CI. Commit your changes, then run:
+CI. Build and test the bundle first. Commit and push your changes, then tag
+the tested commit before publishing:
 
 ```bash
+git tag v0.2.0
+git push origin v0.2.0
 scripts/release.sh            # tag defaults to v<project VERSION>
-scripts/release.sh v0.1.0     # or pass an explicit tag
+scripts/release.sh v0.2.0     # or pass an explicit tag
 ```
 
 The script builds the Flatpak bundle and runs `gh release create` with
 auto-generated notes. If the release already exists it re-uploads the bundle
 with `--clobber`, so a rebuild can be published the same way. `gh` creates the
-tag on the remote from the default branch if it does not exist yet; to tag the
-source locally as well:
+tag on the remote from the default branch if it does not exist yet. Creating
+the tag explicitly as above ensures it refers to the tested source.
+
+To publish the exact bundle you already tested without rebuilding it:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+gh release create v0.2.0 build/io.github.amb.QtM4bPlayer.flatpak --verify-tag --title v0.2.0 --generate-notes
 ```
 
 `gh` must be authenticated (`gh auth login`) with `repo` access to the
