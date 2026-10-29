@@ -1,51 +1,39 @@
 # qt-m4b-player
 
-A separate C++20 / Qt Quick audiobook player project for Linux, with Android
-planned. Playback uses libmpv; FFmpeg reads metadata, chapters, artwork and
-embedded `mov_text` captions; Qt SQL manages a local SQLite library.
+A local audiobook player for Linux, built with C++20 and Qt Quick. It uses
+libmpv for playback, FFmpeg for metadata and embedded captions, and SQLite for
+the library. Playback never modifies audiobook files.
 
-The macOS app is a read-only product and behavior reference. This project has
-its own sources, database, build setup and copies of the synthetic test fixtures.
-See [architecture](docs/ARCHITECTURE.md) for ownership, playback rules and the
-startup constraints, and [schema and feature parity](docs/SCHEMA_AND_FEATURE_PARITY.md)
-for storage and the remaining feature gaps.
+The Linux app is a prototype. Android support and further macOS feature parity
+are planned. The macOS app serves as a product and behavior reference; this
+project has its own source, database and build setup.
 
-## Status
+[Install](#install) · [Using the player](#using-the-player) ·
+[Known limitations](#known-limitations) · [Build from source](#build-from-source) ·
+[Development](#development) · [Documentation](#documentation)
 
-This is the first runnable **Linux prototype**, not complete macOS feature parity.
-It provides local file opening, paused resume, play/pause, ten-second skips,
-chapter-scoped scrubbing, pause-and-remember chapter navigation, Stop, cover art,
-pitch-preserving speed changes, volume, recent locations and embedded captions
-with audio-timed automatic overflow scrolling. The star popup offers half-star
-ratings and opens the per-book Notes Save/Cancel editor. A floating speech-tone EQ offers warm/clear tilt, a
-logarithmic pivot, peak-limited Boost, bypass, reset and automatic output headroom. In Fill mode,
-the transport panel blurs the artwork behind it, including with software rendering.
-Progress and per-book CC / Stop
-After Chapter choices are saved in SQLite. Playback never changes audiobook files.
-The desktop window remembers its normal size and maximized state between launches.
-Window placement is controlled by the desktop, including KDE on Wayland.
-Caption text size and Fill cover background are global preferences saved as soon
-as they change, whether adjusted in View or Appearance.
+## Features
 
-Stop After Chapter currently pauses after observing a boundary and seeks back to
-the boundary. It does **not** yet provide the macOS engine-side audio cutoff;
-brief next-chapter audio is possible. Caption indexing scans the file in a
-cancellable background job, so large books can take time to enable CC.
+- **Chapter-aware playback:** chapter-scoped scrubbing, ten-second skips,
+  pause-and-remember chapter navigation, and Stop After Chapter.
+- **Listening progress:** paused resume, recent locations and saved per-book
+  caption and Stop After Chapter choices.
+- **Speed and volume:** pitch-preserving playback speed, volume control and
+  a speech EQ with protected Boost and automatic chapter loudness correction.
+- **Notes and ratings:** per-book plain-text notes and half-star ratings,
+  available from the star popup.
+- **Embedded captions:** timed `mov_text` captions with automatic overflow
+  scrolling and adjustable text size.
+- **Desktop interface:** system colour scheme, saved window size, cover art
+  and a blurred transport background in Fill mode, including with software rendering.
 
-Still planned: additional appearance preferences, a
-configurable playback-rate list, more global defaults (colors, fonts),
-independent windows, drag/drop, Linux MPRIS, full accessibility validation,
-precise chapter cutoff, library restore/recovery and Android packaging/media
-services.
-See [database schema and feature parity](docs/SCHEMA_AND_FEATURE_PARITY.md) for
-the exact Qt schema and the current feature gaps.
+## Install
 
-## Install the Flatpak
+### Flatpak (Linux x86_64)
 
-[v0.2.0](https://github.com/amb/qt-m4b-player/releases/tag/v0.2.0) is the latest
-published Linux x86_64 release. Download `io.github.amb.QtM4bPlayer.flatpak`
-from that release, then run the following from the download directory with
-Flatpak installed:
+Download `io.github.amb.QtM4bPlayer.flatpak` from
+[release v0.2.0](https://github.com/amb/qt-m4b-player/releases/tag/v0.2.0).
+With Flatpak installed, run these commands from the download directory:
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
@@ -55,32 +43,153 @@ flatpak run io.github.amb.QtM4bPlayer
 ```
 
 The app is distributed through GitHub releases; Flathub supplies the KDE runtime.
-To update an existing installation, close the player, download the new bundle and run:
+Source changes on `main` may be newer than the published release.
+
+### Update an existing installation
+
+Close the player, download the new bundle, then run:
 
 ```bash
 flatpak install --user --reinstall ./io.github.amb.QtM4bPlayer.flatpak
 ```
 
 GitHub releases do not provide automatic Flatpak updates.
-Books in your home directory are accessible by default. For books on another
-mount, grant access to that directory, for example:
+
+### Access books outside your home directory
+
+Books in your home directory are accessible by default. Grant access to other
+mounts as needed, for example:
 
 ```bash
 flatpak override --user --filesystem=/mnt/nas io.github.amb.QtM4bPlayer
 ```
 
-See [releasing](docs/RELEASING.md) for building and publishing bundles, sandbox
-access and KDE theming. Newer source changes on `main` may follow the published
-release.
+## Using the player
 
-## Dependencies and build
+### Open a book and control playback
 
-Use apt for the initial Linux development environment. No Conan, vcpkg or
-download-at-configure dependency system is used. The tested host is Ubuntu
-26.04.1 x86_64; see [exact dependency versions](docs/DEPENDENCIES.md).
+Use **File → Open Audiobook**, **File → Open Recent**, or Ctrl+O. Without a file
+argument, the player opens the last available recent location paused.
 
-Install dependencies yourself. All privileged commands are run by the developer;
-nothing in this repository invokes `sudo`:
+The menu bar and lower transport controls provide the playback actions.
+**Help → Player Help** lists the shortcuts.
+
+| Shortcut | Action |
+| --- | --- |
+| Ctrl+O | Open an audiobook |
+| Space | Play / pause |
+| Left / Right | Skip back / forward ten seconds |
+| Ctrl+Left / Ctrl+Right | Previous / next chapter |
+| Ctrl+S | Stop and return to the chapter start |
+| Ctrl+J | Open the chapter list |
+| Ctrl+Shift+C | Toggle captions once indexed |
+| Ctrl+N | Open Notes |
+| Ctrl+E | Open EQ |
+| Ctrl+, | Open Appearance |
+
+Chapters, rating/notes, playback speed and volume open above their buttons with
+matching dimming and active-button highlights.
+
+- Escape or an outside click dismisses a popup.
+- Up/Down and Enter select a chapter or speed; long lists scroll to fit.
+- Rating and volume adjustments keep their popups open. Arrow keys adjust the
+  focused control without seeking playback.
+
+### Notes and ratings
+
+Click the **star** for half-star ratings and **Open notes**. While the rating
+control has focus, Left/Right changes the rating by half a star; Home clears it.
+
+Open the notes editor from the star popup, **File → Notes**, or Ctrl+N.
+
+- Ctrl+S saves the note; Escape or Cancel discards the draft.
+- Saving empty text clears the note.
+- Notes follow the book across renamed copies.
+- A failed save leaves the editor and draft open.
+
+### Speech EQ and Boost
+
+Open the floating EQ panel with **Playback → Open EQ**, Ctrl+E, or **Open EQ**
+below the volume slider.
+
+| Control | Range / behavior |
+| --- | --- |
+| Tone | Warm/clear tilt from −12 to +12 dB |
+| Frequency | Logarithmic balance point from 200 to 4,000 Hz |
+| Boost | 0 to +24 dB, protected by a lookahead peak limiter |
+| Reset | Neutral tone, 1,000 Hz and zero Boost; preserves bypass |
+
+EQ starts disabled. Settings survive book changes within the current session
+but are not saved across launches. Double-click a knob, or press Space while
+it has focus, to reset that knob. Escape closes the panel.
+
+Boost raises quiet passages and reduces dynamics at higher settings. It cannot
+repair distortion already in a recording. Peak protection follows speed
+processing, uses 4× oversampling and has a −1 dB output ceiling.
+
+The response graph shows tone before automatic headroom, Boost and limiting.
+See [architecture](docs/ARCHITECTURE.md) for the audio filter details.
+
+### Auto loudness
+
+**Auto loudness: −18 LKFS** measures the current chapter in the background and
+sets a fixed Boost amount. It is available for chapters longer than one minute.
+
+- Measurement accounts for the current tone and headroom settings, then enables EQ.
+- Quiet chapters are raised toward −18 LKFS; louder chapters need no boost.
+- Silence or a failed measurement leaves Boost unchanged.
+- Changing the book, chapter or EQ settings cancels an active measurement.
+- The +24 dB cap and limiter can keep very quiet or dynamic material below the
+  target. The panel reports the result.
+
+This applies a fixed correction rather than adjusting sentence-to-sentence
+volume. It changes neither the audiobook file nor the main volume setting.
+
+### Captions, artwork and appearance
+
+- **Captions:** CC becomes available after a usable timed track has been indexed.
+  Indexing runs in a cancellable background job; large books can take time.
+- **Cover framing:** in Fill mode, drag the cover vertically to reframe it.
+  Framing stays within the image edges and survives resizing. It resets for a new
+  book and is not saved across launches. Dragging does not toggle playback.
+- **Layout:** controls use one row in wide windows and two in narrow windows.
+  Chapter and time information sits above the seek bar, wrapping when needed.
+- **Preferences:** caption text size and Fill cover background save immediately
+  when changed through View or Appearance.
+- **Window:** normal size and maximized state are saved between launches.
+  The desktop controls window placement, including on KDE Wayland.
+
+The UI follows the desktop colour scheme. Transport icons use the active
+palette, including with Qt's software renderer.
+
+## Known limitations
+
+- **Chapter cutoff:** Stop After Chapter observes the boundary, pauses and seeks
+  back. Brief next-chapter audio is possible; precise engine-side cutoff is planned.
+- **EQ transitions:** live adjustments use coalesced filter updates rather than
+  the macOS engine's per-sample coefficient smoothing.
+- **Validation:** automated playback tests use silent output. Audible quality,
+  full accessibility and real-device Android behavior still need validation.
+
+Other planned work includes:
+
+- Additional appearance preferences, global defaults and configurable playback rates.
+- Independent windows, drag/drop and Linux MPRIS integration.
+- Library restore/recovery and Android packaging/media services.
+
+See [schema and feature parity](docs/SCHEMA_AND_FEATURE_PARITY.md) for the full
+comparison and remaining gaps.
+
+## Build from source
+
+### Dependencies
+
+The tested host is Ubuntu 26.04.1 x86_64. See
+[dependency versions](docs/DEPENDENCIES.md) for the exact baseline.
+
+Install development dependencies yourself; repository scripts do not invoke `sudo`.
+The native build uses apt libraries, with no Conan, vcpkg or dependency downloads
+at configure time.
 
 ```bash
 sudo apt install build-essential cmake ninja-build pkg-config python3 \
@@ -91,74 +200,36 @@ sudo apt install build-essential cmake ninja-build pkg-config python3 \
   libqt6sql6-sqlite libqt6svg6
 ```
 
+For KDE Plasma styling, also install `qml6-module-org-kde-breeze` or
+`qml6-module-org-kde-qqc2desktopstyle`. Otherwise, the app uses Qt's default style.
+
+### Build and run
+
 ```bash
 cmake --preset linux-debug
 cmake --build --preset linux-debug
-ctest --preset linux-debug
-cmake --build build/debug --target qt-m4b-player_qmllint
 ./build/debug/qt-m4b-player /path/to/book.m4b
 ```
 
-CTest sets a UTF-8 C locale and an isolated Qt software-rendering configuration,
-so the tests also work on hosts with a comma-decimal locale or KDE styling.
-The application sets `LC_NUMERIC` to `C` itself. See the startup constraints in
-[architecture](docs/ARCHITECTURE.md).
+Use the `linux-release` configure/build preset for an optimized native build.
+The optional CMake install target installs the executable and desktop integration;
+it uses system libraries. See [releasing](docs/RELEASING.md) for Flatpak bundles.
 
-Without a file argument, the last available recent location opens paused.
-Use **File → Open Audiobook**, **File → Open Recent**, or Ctrl+O to choose a book.
-The menu bar provides File, Playback, View and Help menus, including speed, volume,
-chapters, captions, appearance and full screen. Space toggles playback; Left/Right
-skip ten seconds; Ctrl+Left/Right changes chapters. **Help → Player Help** lists
-the shortcuts. The lower transport controls provide the same playback actions.
-Chapters, rating/notes, playback speed and volume use matching popups above their
-buttons, with the same background dimming and active-button highlight. Escape or
-an outside click dismisses a popup; long lists scroll to stay within the window.
-Use Up/Down and Enter to choose a chapter or speed. Rating and volume adjustments
-stay open, and their arrow keys do not seek playback.
-Click the **star** in the transport controls for half-star ratings and
-**Open notes**. Left/Right changes the rating by half a star; Home clears it.
-**File → Notes** or Ctrl+N also opens the current book's plain-text notes; Ctrl+S saves
-and Escape/Cancel discards the draft. Empty text clears the note. Notes follow
-the book across renamed copies, and a failed save keeps the editor and draft open.
-**Playback → Open EQ**, Ctrl+E, or **Open EQ** below the volume slider opens a
-reusable floating panel. EQ starts disabled. Tone spans −12 to +12 dB, and the
-balance point spans 200–4,000 Hz logarithmically. Reset restores neutral tone at
-1,000 Hz and zero Boost without changing bypass. Boost spans 0 to +24 dB and
-lifts quiet passages through a lookahead limiter, rather than hard-clipping loud
-peaks. Higher boost reduces dynamics; it cannot repair distortion already in a
-recording. Peak protection runs after pitch-preserving speed processing and uses
-4× oversampling with a −1 dB output ceiling. Double-click a knob or press Space while it
-has focus to reset that knob. Settings survive book changes for the current
-session and are not saved across launches. Output headroom is −abs(tone) dB;
-the graph displays the tone response before this trim, Boost and limiting. The Qt implementation
-coalesces live adjustments into filter updates; it does not reproduce the macOS
-engine's per-sample coefficient smoothing.
+## Development
 
-**Auto loudness: −18 LKFS** measures the current chapter in a cancellable
-background job, available only for chapters longer than one minute. It accounts
-for the current tone/headroom settings, then sets a fixed Boost amount and enables
-EQ. Quiet chapters are raised toward −18 LKFS; louder chapters need no boost.
-It does not continually adjust sentence-to-sentence volume. Silence and failed
-measurements leave Boost unchanged. Changing books, chapters or EQ settings
-cancels an active measurement. The +24 dB cap and peak limiter may keep very quiet
-or highly dynamic material below the target; the result is shown in the panel.
-Measurement never changes the audiobook file or the main volume setting.
-The CC command enables once a usable timed track has been indexed. The bottom
-panel uses one control row in wide windows and two rows in narrow windows, with
-the chapter, elapsed time and remaining-book percentage above the seek bar.
-The elapsed-time readout stays exactly centered when all three labels fit on one
-line, reserving only its natural text width. Otherwise, the chapter moves to its
-own row. In Fill mode, drag the cover vertically to reframe its crop; framing is
-clamped to the image edges, retained through resizing, and reset for a new book.
-A drag does not toggle playback. Cover framing is not persisted across launches.
+### Tests and QML checks
 
-Transport icons are vendored from Phosphor Icons 2.1.1 under the MIT license.
-Prefer vendored, freely licensed icons over platform-specific symbol
-dependencies.
-See [icon provenance and license](assets/icons/README.md); no icon font or
-network download is needed at build time or runtime.
+```bash
+ctest --preset linux-debug
+cmake --build build/debug --target qt-m4b-player_qmllint
+```
 
-For an isolated test library and a headless UI smoke check:
+CTest sets a UTF-8 C locale and an isolated Qt software-rendering configuration.
+Tests exercise real FFmpeg extraction and libmpv playback with silent output.
+The app sets `LC_NUMERIC` to `C`; see the
+[startup constraints](docs/ARCHITECTURE.md) before changing initialization.
+
+For a headless UI smoke check with an isolated test library:
 
 ```bash
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
@@ -166,68 +237,65 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
   tests/fixtures/captions.m4b
 ```
 
-`--no-resume` starts empty. `--data-dir DIRECTORY` isolates the database/cache/settings.
-`--dependency-versions` prints the runtime Qt, mpv engine and SQLite versions.
-`--screenshot PATH` writes a window image while `--smoke-test` runs.
-`linux-release` is the release configure/build preset. The optional CMake install
-target installs the executable, desktop entry, AppStream metadata and icons; it
-is not a self-contained bundle. Self-hosted Flatpak bundles built from
-`packaging/flatpak/` are attached to GitHub releases; see
-[releasing](docs/RELEASING.md).
+### Command-line options
 
-The UI follows the desktop colour scheme and ships no palette of its own. On KDE
-Plasma install `qml6-module-org-kde-breeze` (or
-`qml6-module-org-kde-qqc2desktopstyle`) so the KDE Quick Controls style is used;
-otherwise the app falls back to Qt's default style. Transport icons are
-recoloured on the CPU from the active palette, including with Qt's software renderer.
+| Option | Purpose |
+| --- | --- |
+| `--no-resume` | Start with an empty player |
+| `--data-dir DIRECTORY` | Isolate the database, cache and settings |
+| `--dependency-versions` | Print runtime Qt, mpv engine and SQLite versions |
+| `--smoke-test` | Load the UI with silent audio, then exit after one second |
+| `--screenshot PATH` | Save a window image during a smoke test |
 
-## Storage and development
+### Inspect media and test a real book
 
-The standard Qt application data directory is used (normally
-`~/.local/share/qt-m4b-player/qt-m4b-player/`). It contains `library.sqlite` and a
-replaceable `covers/` cache, plus `settings.ini` for window size/state and appearance. Debug,
-release and installed builds share these settings when using the same data directory.
-Saved sizes are bounded by the current screen and the UI's minimum size.
-The database keeps multiple locations for a book and uses a `STRICT` schema with
-write-ahead logging, a foreign key that cascades location cleanup and an
-`application_id` stamp. Upgrading an older schema writes a timestamped backup
-next to the database first, and a file that is not recognised as this app's
-library is rejected without being modified.
-The reference app's `quick:v1` sampled fingerprint algorithm is preserved; its
-macOS database is never opened or migrated by this project.
-
-The [architecture and remaining parity work](docs/ARCHITECTURE.md) describe state
-ownership, platform boundaries and the next milestones. Tests exercise real
-FFmpeg extraction and libmpv playback with the silent output backend; they do
-not establish audible quality or real-device Android behavior.
-
-For an additional real book, run the optional read-only integration check. Use an
-**absolute path** because CTest runs from the build directory:
-
-```bash
-QT_M4B_TEST_BOOK=/absolute/path/to/book.m4b ctest --preset linux-debug
-```
-
-The check selects Chapter Twelve when the book provides one.
-
-Local debug copies can live in `.cache/books/`, which Git ignores, and the
-reference UI screenshots are in `.cache/reference/`. Use a local copy for routine
-development and the network-share path only when validating share loading,
-streaming and seeking. The developer inspection command reads metadata without
-changing the book:
+These commands read metadata without modifying the book:
 
 ```bash
 ./build/debug/media-inspect /path/to/book.m4b
 ./build/debug/media-inspect --captions /path/to/book.m4b
 ```
 
-The first real NAS book check found 56 chapters and 5,489 timed cues in a
-roughly 12-hour M4B. Metadata read took about 0.2 seconds and full caption indexing
-about 7.5 seconds on that run. The optional libmpv load/seek/background-index
-check passed with silent output and an isolated temporary library. These timings
-are observations from one share/cache state, not latency guarantees.
+To include an additional book in the read-only integration check, use an absolute
+path because CTest runs from the build directory:
+
+```bash
+QT_M4B_TEST_BOOK=/absolute/path/to/book.m4b ctest --preset linux-debug
+```
+
+Local debug copies can live in the ignored `.cache/books/` directory; reference
+UI screenshots live in `.cache/reference/`. Prefer local copies for routine
+development and use mounted network paths to validate share loading and seeking.
+
+### Data and settings
+
+The default Qt application data directory is normally
+`~/.local/share/qt-m4b-player/qt-m4b-player/`. Override it with `--data-dir`.
+
+| File / directory | Contents |
+| --- | --- |
+| `library.sqlite` | Books, locations, listening progress, notes, ratings and per-book preferences |
+| `settings.ini` | Window size/state and global appearance preferences |
+| `covers/` | Replaceable artwork cache |
+
+Debug, release and installed builds share data when using the same directory.
+Window sizes are bounded by the screen and the UI's minimum size.
+
+Schema upgrades first write a timestamped backup beside the database.
+Unrecognized database files are rejected without modification. The macOS
+database is never opened or migrated; only its `quick:v1` book fingerprint
+algorithm is shared. See [storage and schema](docs/SCHEMA_AND_FEATURE_PARITY.md).
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md): state ownership, playback rules and startup constraints.
+- [Schema and feature parity](docs/SCHEMA_AND_FEATURE_PARITY.md): storage, behavior comparison and planned work.
+- [Dependencies](docs/DEPENDENCIES.md): native and Flatpak dependency baselines.
+- [Releasing](docs/RELEASING.md): build, test and publish Flatpak bundles.
+- [Application icon](packaging/icons/README.md): macOS artwork source and transparent Linux exports.
+- [Transport icons](assets/icons/README.md): vendored Phosphor Icons 2.1.1 provenance.
 
 ## License
 
-MIT; see [LICENSE](LICENSE). The vendored Phosphor icons are MIT as well
-([provenance](assets/icons/README.md)).
+MIT; see [LICENSE](LICENSE). The vendored Phosphor icons are also MIT licensed.
+No icon font or icon download is needed at build time or runtime.
