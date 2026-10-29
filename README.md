@@ -16,7 +16,11 @@ This is the first runnable **Linux prototype**, not complete macOS feature parit
 It provides local file opening, paused resume, play/pause, ten-second skips,
 chapter-scoped scrubbing, pause-and-remember chapter navigation, Stop, cover art,
 pitch-preserving speed changes, volume, recent locations and embedded captions
-with audio-timed automatic overflow scrolling. Progress and per-book CC / Stop
+with audio-timed automatic overflow scrolling. The star popup offers half-star
+ratings and opens the per-book Notes Save/Cancel editor. A floating speech-tone EQ offers warm/clear tilt, a
+logarithmic pivot, peak-limited Boost, bypass, reset and automatic output headroom. In Fill mode,
+the transport panel blurs the artwork behind it, including with software rendering.
+Progress and per-book CC / Stop
 After Chapter choices are saved in SQLite. Playback never changes audiobook files.
 The desktop window remembers its normal size and maximized state between launches.
 Window placement is controlled by the desktop, including KDE on Wayland.
@@ -28,14 +32,39 @@ the boundary. It does **not** yet provide the macOS engine-side audio cutoff;
 brief next-chapter audio is possible. Caption indexing scans the file in a
 cancellable background job, so large books can take time to enable CC.
 
-Still planned: notes/rating UI, additional appearance preferences, a
+Still planned: additional appearance preferences, a
 configurable playback-rate list, more global defaults (colors, fonts),
 independent windows, drag/drop, Linux MPRIS, full accessibility validation,
 precise chapter cutoff, library restore/recovery and Android packaging/media
 services.
-The notes/rating schema fields are reserved, without an editor yet.
 See [database schema and feature parity](docs/SCHEMA_AND_FEATURE_PARITY.md) for
 the exact Qt schema and the current feature gaps.
+
+## Install the Flatpak
+
+[v0.1.0](https://github.com/amb/qt-m4b-player/releases/tag/v0.1.0) is the first
+published Linux x86_64 release. Download `io.github.amb.QtM4bPlayer.flatpak`
+from that release, then run the following from the download directory with
+Flatpak installed:
+
+```bash
+flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install --user flathub org.kde.Platform//6.10
+flatpak install --user ./io.github.amb.QtM4bPlayer.flatpak
+flatpak run io.github.amb.QtM4bPlayer
+```
+
+The app is distributed through GitHub releases; Flathub supplies the KDE runtime.
+Books in your home directory are accessible by default. For books on another
+mount, grant access to that directory, for example:
+
+```bash
+flatpak override --user --filesystem=/mnt/nas io.github.amb.QtM4bPlayer
+```
+
+See [releasing](docs/RELEASING.md) for building and publishing bundles, sandbox
+access and KDE theming. Newer source changes on `main` may follow the published
+release.
 
 ## Dependencies and build
 
@@ -49,7 +78,7 @@ nothing in this repository invokes `sudo`:
 ```bash
 sudo apt install build-essential cmake ninja-build pkg-config python3 \
   qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools \
-  libmpv-dev libavformat-dev libavcodec-dev libavutil-dev \
+  libmpv-dev libavformat-dev libavcodec-dev libavutil-dev libavfilter-dev \
   qml6-module-qtquick-controls qml6-module-qtquick-dialogs \
   qml6-module-qtquick-layouts qml6-module-qtqml-workerscript \
   libqt6sql6-sqlite libqt6svg6
@@ -63,10 +92,9 @@ cmake --build build/debug --target qt-m4b-player_qmllint
 ./build/debug/qt-m4b-player /path/to/book.m4b
 ```
 
-Under a comma-decimal locale such as `LC_NUMERIC=fi_FI.UTF-8`, run the tests as
-`LC_ALL=C ctest --preset linux-debug`. libmpv refuses to start otherwise. The
-application sets `LC_NUMERIC` to `C` itself; the test binary does not, which is
-why the variable is needed here. See the startup constraints in
+CTest sets a UTF-8 C locale and an isolated Qt software-rendering configuration,
+so the tests also work on hosts with a comma-decimal locale or KDE styling.
+The application sets `LC_NUMERIC` to `C` itself. See the startup constraints in
 [architecture](docs/ARCHITECTURE.md).
 
 Without a file argument, the last available recent location opens paused.
@@ -75,6 +103,34 @@ The menu bar provides File, Playback, View and Help menus, including speed, volu
 chapters, captions, appearance and full screen. Space toggles playback; Left/Right
 skip ten seconds; Ctrl+Left/Right changes chapters. **Help → Player Help** lists
 the shortcuts. The lower transport controls provide the same playback actions.
+Click the **star** in the transport controls for half-star ratings and
+**Open notes**. Left/Right changes the rating by half a star; Home clears it.
+**File → Notes** or Ctrl+N also opens the current book's plain-text notes; Ctrl+S saves
+and Escape/Cancel discards the draft. Empty text clears the note. Notes follow
+the book across renamed copies, and a failed save keeps the editor and draft open.
+**Playback → Open EQ**, Ctrl+E, or **Open EQ** below the volume slider opens a
+reusable floating panel. EQ starts disabled. Tone spans −12 to +12 dB, and the
+balance point spans 200–4,000 Hz logarithmically. Reset restores neutral tone at
+1,000 Hz and zero Boost without changing bypass. Boost spans 0 to +24 dB and
+lifts quiet passages through a lookahead limiter, rather than hard-clipping loud
+peaks. Higher boost reduces dynamics; it cannot repair distortion already in a
+recording. Peak protection runs after pitch-preserving speed processing and uses
+4× oversampling with a −1 dB output ceiling. Double-click a knob or press Space while it
+has focus to reset that knob. Settings survive book changes for the current
+session and are not saved across launches. Output headroom is −abs(tone) dB;
+the graph displays the tone response before this trim, Boost and limiting. The Qt implementation
+coalesces live adjustments into filter updates; it does not reproduce the macOS
+engine's per-sample coefficient smoothing.
+
+**Auto loudness: −18 LKFS** measures the current chapter in a cancellable
+background job, available only for chapters longer than one minute. It accounts
+for the current tone/headroom settings, then sets a fixed Boost amount and enables
+EQ. Quiet chapters are raised toward −18 LKFS; louder chapters need no boost.
+It does not continually adjust sentence-to-sentence volume. Silence and failed
+measurements leave Boost unchanged. Changing books, chapters or EQ settings
+cancels an active measurement. The +24 dB cap and peak limiter may keep very quiet
+or highly dynamic material below the target; the result is shown in the panel.
+Measurement never changes the audiobook file or the main volume setting.
 The CC command enables once a usable timed track has been indexed. The bottom
 panel uses one control row in wide windows and two rows in narrow windows, with
 the chapter, elapsed time and remaining-book percentage above the seek bar.
@@ -134,11 +190,10 @@ FFmpeg extraction and libmpv playback with the silent output backend; they do
 not establish audible quality or real-device Android behavior.
 
 For an additional real book, run the optional read-only integration check. Use an
-**absolute path** because CTest runs from the build directory, and apply the same
-locale prefix:
+**absolute path** because CTest runs from the build directory:
 
 ```bash
-QT_M4B_TEST_BOOK=/absolute/path/to/book.m4b LC_ALL=C ctest --preset linux-debug
+QT_M4B_TEST_BOOK=/absolute/path/to/book.m4b ctest --preset linux-debug
 ```
 
 The check selects Chapter Twelve when the book provides one.

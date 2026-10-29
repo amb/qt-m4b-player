@@ -16,12 +16,14 @@ public:
     bool setPaused(bool paused);
     bool setSpeed(double speed);
     bool setVolume(double volume);
+    bool setEqualizer(bool enabled, double tone, double frequency, double boost = 0);
     QString version() const;
 
 signals:
     void propertyChanged(const QString &name, const QVariant &value);
     void fileLoaded(const QString &path);
     void failed(const QString &message);
+    void equalizerFailed(const QString &message);
 
 private:
     bool check(int status);
@@ -33,4 +35,5 @@ private:
     quint64 m_generation = 0;
     quint64 m_nextRequest = 0;
     QHash<quint64, quint64> m_requests;
+    quint64 m_equalizerRequest = 0;
 };

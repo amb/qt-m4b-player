@@ -70,6 +70,56 @@ bool createVersionOneLibrary(RawDatabase &raw)
 class CoreTests : public QObject {
     Q_OBJECT
 private slots:
+    void ratingsPersistAndPreserveNotesAndProgress()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("library.sqlite");
+        {
+            Library library(path);
+            library.saveProgress("a", "/books/a.m4b", "A", "Author", 42);
+            library.savePreferences("a", true, false);
+            library.saveNotes("a", "Keep my notes");
+            library.saveRating("a", 35);
+            library.saveProgress("a", "/books/renamed.m4b", "A", "Author", 43);
+            QCOMPARE(library.find("a").rating, 35);
+            QCOMPARE(library.find("a").position, 43.0);
+            QVERIFY(library.find("a").captions.value());
+            QCOMPARE(library.notes("a"), "Keep my notes");
+            QVERIFY_EXCEPTION_THROWN(library.saveRating("a", 51), std::invalid_argument);
+            QVERIFY_EXCEPTION_THROWN(library.saveRating("a", 1), std::invalid_argument);
+            QVERIFY_EXCEPTION_THROWN(library.saveRating("missing", 30), std::runtime_error);
+        }
+        Library reopened(path);
+        QCOMPARE(reopened.find("a").rating, 35);
+        reopened.saveRating("a", 0);
+        QCOMPARE(reopened.find("a").rating, 0);
+        QCOMPARE(reopened.notes("a"), "Keep my notes");
+    }
+    void notesPersistWithoutOverwritingOtherBookFields()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("library.sqlite");
+        {
+            Library library(path);
+            library.saveProgress("a", "/books/a.m4b", "A", "Author", 42);
+            library.saveProgress("b", "/books/b.m4b", "B", "Author", 7);
+            library.savePreferences("a", true, false);
+            library.saveNotes("a", "A note — café\nSecond line <b>plain text</b>");
+            library.saveNotes("b", "Another book");
+            library.saveProgress("a", "/books/renamed.m4b", "A", "Author", 43);
+            QCOMPARE(library.notes("a"), QString::fromUtf8("A note — café\nSecond line <b>plain text</b>"));
+            QCOMPARE(library.notes("b"), "Another book");
+            QCOMPARE(library.find("a").position, 43.0);
+            QCOMPARE(library.find("a").captions.value(), true);
+            QCOMPARE(library.find("a").stopAfterChapter.value(), false);
+            QVERIFY_EXCEPTION_THROWN(library.saveNotes("missing", "draft"), std::runtime_error);
+        }
+        Library reopened(path);
+        QVERIFY(reopened.notes("a").contains("Second line"));
+        reopened.saveNotes("a", "");
+        QVERIFY(reopened.notes("a").isEmpty());
+        QCOMPARE(reopened.notes("b"), "Another book");
+    }
     void embeddedTrackAndChapterTiming()
     {
         const auto cancel = std::make_shared<std::atomic_bool>(false);

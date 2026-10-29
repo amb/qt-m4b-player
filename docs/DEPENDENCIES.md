@@ -16,6 +16,7 @@ shared-library packages and the relevant dynamically loaded Qt plugins.
 | libavformat | 62.3.100 | Same FFmpeg package |
 | libavcodec | 62.11.100 | Same FFmpeg package |
 | libavutil | 60.8.100 | Same FFmpeg package |
+| libavfilter | 11.4.100 | Same FFmpeg package; directly used by chapter loudness measurement |
 | SQLite runtime via Qt SQL | 3.46.1 | `3.46.1-9ubuntu0.3` |
 
 The `mpv.pc` version is the **client API** version, not the engine release.
@@ -33,7 +34,8 @@ Build tooling from the same baseline:
 | Python 3 | 3.14.3 | `python3 3.14.3-0ubuntu2` |
 
 CMake requires Qt >= 6.5, libmpv API >= 2.0, and FFmpeg 6-era library versions
-or newer. These are build minimums; only the baseline above has been validated.
+or newer, including libavfilter >= 9 for chapter loudness measurement. These are
+build minimums; only the baseline above has been validated.
 No code or headers are downloaded during configuration.
 
 The bundled Phosphor icon assets use `@phosphor-icons/core` 2.1.1, pinned to

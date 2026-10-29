@@ -119,10 +119,12 @@ and read back as an empty string. Absent metadata never overwrites metadata
 recorded earlier: re-opening a book whose tags cannot be read keeps the known
 title and author. Progress saves preserve the preference fields.
 
-**A column does not imply a working feature:** `rating` and `notes` are reserved.
-Qt has no rating or notes read/write API, no editor and no enforced rating scale.
+Ratings and notes have field-specific persistence APIs. Ratings use integer
+tenths (`0–50`, `0` unrated), with half-star steps (`5`) enforced by the write
+API. The star popup contains the rating selector and Open notes; notes use a
+plain-text Save/Cancel editor.
 Values inserted through another tool survive normal progress and preference
-saves, but the app does not display them.
+saves and are displayed when the book is opened.
 
 ### Deliberate omissions
 
@@ -224,13 +226,26 @@ to another path of the same book.
 - File/Playback/View/Help menus, shortcuts and responsive narrow/wide controls,
   including the centered elapsed-time readout.
 - Saved normal window size and maximized state, verified on KDE Wayland.
+- Per-book plain-text notes with explicit Save/Cancel. The editor captures the
+  logical book fingerprint and retains its draft if saving fails.
+- Per-book half-star ratings, persisted separately from notes and progress;
+  the transport star opens the shared rating/notes popup.
+- Session-local speech-tone EQ: −12 to +12 dB first-order tilt, a logarithmic
+  200–4,000 Hz pivot, response graph, bypass/reset and automatic headroom. An
+  additional 0–24 dB Boost knob uses oversampled lookahead peak limiting after
+  pitch-preserving speed processing. High boost reduces dynamics instead of
+  hard-clipping peaks.
+- One-shot Auto loudness targeting −18 LKFS for the current chapter, enabled
+  only when the chapter exceeds one minute; cancellable background analysis,
+  fixed upward gain, and no change to the source audiobook or main volume.
+- Gaussian artwork blur behind the transport panel in Fill mode, aligned with
+  cover framing and supported by both software and accelerated renderers.
 
 ## Missing or incomplete Qt features
 
 | Feature | Current gap |
 | --- | --- |
-| Ratings | No star control, popover, display or persistence API. The column is reserved. |
-| Notes | No editor, display or persistence API. The column is reserved; an editor must bind to a logical book, not to whatever is currently playing. |
+| EQ adjustment smoothing | Qt coalesces changes into libmpv filter replacements; macOS smooths coefficients per sample over 10 ms. Audible transition quality still needs manual validation. |
 | Precise Stop After Chapter | Qt observes the audio clock, pauses and seeks back to the boundary. Brief next-chapter audio is possible. The macOS engine enforces a playback endpoint before the notification. |
 | Independent player windows | Qt has one window/session. Opening another book replaces it; macOS supports independent windows and focused-player coordination. |
 | Drag-and-drop opening | No audiobook drop target or drag overlay in Qt. |
@@ -252,16 +267,17 @@ These are port milestones, not missing macOS user features:
   still need hardening and validation.
 - Full keyboard/screen-reader coverage and audible seek, pitch and chapter-cutoff
   behavior still need validation. Silent-engine tests do not establish audio quality.
-- Installation uses system libraries and a desktop entry; a self-contained
-  distribution package and its library version policy remain future work.
+- Linux x86_64 Flatpak bundles are built and verified, with v0.1.0 published
+  through GitHub releases. The KDE 6.10 runtime supplies Qt and FFmpeg; the
+  manifest builds mpv and its helper libraries. AppStream screenshots and
+  aarch64 build verification remain open; see [releasing](RELEASING.md).
 
 ## Follow-up decisions
 
 The storage shape is settled: Qt-native, `STRICT`, fingerprint-keyed, with
-reserved rating and notes columns. Open items are behavioural, not schema-level:
+rating and notes columns. Open items are behavioural, not schema-level:
 
-- Ratings and notes need APIs and UI that bind to a logical book, and the rating
-  scale (`0–50` tenths of a star, `0` unrated) should be enforced in code if the
-  reserve is ever populated.
+- Rating writes enforce half-star steps within `0–50` tenths of a star (`0`
+  unrated). Notes bind saves to the fingerprint captured by the editor.
 - If a global "default Stop After Chapter" or "default CC" preference is added,
   the existing `NULL` versus `0` distinction already supports inheriting it.

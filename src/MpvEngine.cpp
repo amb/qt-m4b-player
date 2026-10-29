@@ -1,4 +1,5 @@
 #include "MpvEngine.h"
+#include "TiltEqualizer.h"
 
 #include <QFile>
 #include <stdexcept>
@@ -103,6 +104,21 @@ bool MpvEngine::command(const char **args)
     return true;
 }
 
+bool MpvEngine::setEqualizer(bool enabled, double tone, double frequency, double boost)
+{
+    const auto graph = enabled && (tone != 0 || boost > 0) ? TiltEqualizer::filter(tone, frequency, boost).toUtf8() : QByteArray();
+    const char *args[] = {"af", "set", graph.constData(), nullptr};
+    const quint64 request = ++m_nextRequest;
+    const int status = mpv_command_async(m_handle, request, args);
+    if (status < 0) {
+        emit equalizerFailed(QString::fromUtf8(mpv_error_string(status)));
+        return false;
+    }
+    // EQ belongs to the session, so replies remain relevant across book loads.
+    m_equalizerRequest = request;
+    return true;
+}
+
 bool MpvEngine::property(const char *name, mpv_format format, void *value)
 {
     const quint64 request = ++m_nextRequest;
@@ -128,6 +144,14 @@ void MpvEngine::drainEvents()
         if (event->event_id == MPV_EVENT_NONE)
             break;
         if (event->event_id == MPV_EVENT_COMMAND_REPLY || event->event_id == MPV_EVENT_SET_PROPERTY_REPLY) {
+            if (event->reply_userdata == m_equalizerRequest) {
+                m_equalizerRequest = 0;
+                if (event->error < 0) {
+                    setEqualizer(false, 0, 1000);
+                    emit equalizerFailed(QString::fromUtf8(mpv_error_string(event->error)));
+                }
+                continue;
+            }
             const auto request = m_requests.find(event->reply_userdata);
             if (request != m_requests.end()) {
                 const bool current = request.value() == m_generation;

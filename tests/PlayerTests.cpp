@@ -5,6 +5,7 @@
 #include <QElapsedTimer>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QDataStream>
 #include <QtTest>
 #include <clocale>
 
@@ -15,6 +16,120 @@ class PlayerTests : public QObject {
         return QUrl::fromLocalFile(QString(FIXTURE_DIR) + "/" + name + ".m4b");
     }
 private slots:
+    void autoLoudnessUsesALongChapterAndIgnoresCancelledResults()
+    {
+        QTemporaryDir directory;
+        const QString input = directory.filePath("quiet-chapter.wav");
+        QFile file(input);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QDataStream wav(&file);
+        wav.setByteOrder(QDataStream::LittleEndian);
+        constexpr int count = 65*16000;
+        wav.writeRawData("RIFF", 4); wav << quint32(36+count*2);
+        wav.writeRawData("WAVEfmt ", 8); wav << quint32(16) << quint16(1) << quint16(1)
+            << quint32(16000) << quint32(32000) << quint16(2) << quint16(16);
+        wav.writeRawData("data", 4); wav << quint32(count*2);
+        for (int i = 0; i < count; ++i)
+            wav << qint16(32767*0.02*std::sin(2*std::acos(-1.0)*1000*i/16000));
+        file.close();
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY(player.notesAvailable());
+        QVERIFY(!player.loudnessAvailable());
+        player.autoLoudness();
+        QVERIFY(!player.loudnessAnalyzing());
+        player.openLocalPath(input);
+        QTRY_VERIFY(player.loudnessAvailable());
+        QElapsedTimer submitted; submitted.start();
+        player.autoLoudness();
+        QVERIFY(submitted.elapsed() < 100);
+        QVERIFY(player.loudnessAnalyzing());
+        QTRY_VERIFY_WITH_TIMEOUT(!player.loudnessAnalyzing(), 10000);
+        QVERIFY2(player.loudnessStatus().contains("Boost"), qPrintable(player.loudnessStatus()));
+        QVERIFY(player.equalizerEnabled());
+        QVERIFY(std::abs(player.equalizerBoost()-19) < 0.3);
+        QVERIFY(!player.playing());
+        QCOMPARE(player.position(), 0.0);
+        player.setEqualizerBoost(4);
+        player.autoLoudness();
+        player.cancelLoudness();
+        QVERIFY(!player.loudnessAnalyzing());
+        QTest::qWait(200);
+        QCOMPARE(player.equalizerBoost(), 4.0);
+        player.autoLoudness();
+        player.setEqualizerTone(3);
+        QVERIFY(!player.loudnessAnalyzing());
+        player.autoLoudness();
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY(player.notesAvailable());
+        QVERIFY(!player.loudnessAnalyzing());
+        QCOMPARE(player.equalizerBoost(), 4.0);
+        QVERIFY(!player.loudnessAvailable());
+    }
+    void notesRemainBoundToTheBookOpenedForEditing()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        QVERIFY(player.notesForEditing().isEmpty());
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY(player.notesAvailable());
+        const auto first = player.notesForEditing();
+        QVERIFY(!first.isEmpty());
+        player.setRating(35);
+        QCOMPARE(player.rating(), 35);
+        player.openBook(fixture("no-captions"));
+        QTRY_VERIFY(player.notesAvailable());
+        QCOMPARE(player.rating(), 0);
+        const auto second = player.notesForEditing();
+        QVERIFY(first["fingerprint"] != second["fingerprint"]);
+        QVERIFY(player.saveNotes(first["fingerprint"].toString(), "First book's draft").isEmpty());
+        QCOMPARE(library.notes(first["fingerprint"].toString()), "First book's draft");
+        QVERIFY(library.notes(second["fingerprint"].toString()).isEmpty());
+        QVERIFY(!player.saveNotes("missing", "Keep this draft").isEmpty());
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY(player.notesAvailable());
+        QCOMPARE(player.rating(), 35);
+    }
+    void equalizerSurvivesBookReplacementAndResetPreservesBypass()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        QVERIFY(!player.equalizerEnabled());
+        player.setEqualizerTone(8);
+        player.setEqualizerFrequency(1200);
+        player.setEqualizerBoost(18);
+        player.setEqualizerEnabled(true);
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY(player.notesAvailable());
+        player.togglePlayback();
+        QTRY_VERIFY(player.position() > 0.2);
+        player.setEqualizerTone(-6);
+        player.setEqualizerFrequency(3000);
+        QTest::qWait(200);
+        QVERIFY2(player.error().isEmpty(), qPrintable(player.error()));
+        QVERIFY(player.equalizerEnabled());
+        player.openBook(fixture("no-captions"));
+        QTRY_VERIFY(player.notesAvailable());
+        QCOMPARE(player.equalizerTone(), -6.0);
+        QCOMPARE(player.equalizerFrequency(), 3000.0);
+        QCOMPARE(player.equalizerBoost(), 18.0);
+        QVERIFY(player.equalizerEnabled());
+        player.togglePlayback();
+        QTRY_VERIFY(player.position() > 0.2);
+        player.resetEqualizer();
+        QVERIFY(player.equalizerEnabled());
+        QCOMPARE(player.equalizerTone(), 0.0);
+        QCOMPARE(player.equalizerFrequency(), 1000.0);
+        QCOMPARE(player.equalizerBoost(), 0.0);
+        player.setEqualizerEnabled(false);
+        player.resetEqualizer();
+        QTest::qWait(200);
+        QVERIFY(!player.equalizerEnabled());
+        QVERIFY2(player.error().isEmpty(), qPrintable(player.error()));
+    }
     void nonCNumericLocaleStartup()
     {
         const QByteArray previous = std::setlocale(LC_NUMERIC, nullptr);

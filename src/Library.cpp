@@ -248,12 +248,13 @@ Library::~Library()
 BookState Library::find(const QString &fingerprint) const
 {
     QSqlQuery query(m_database);
-    query.prepare("SELECT position, captions, stop_after_chapter FROM books WHERE fingerprint = ?");
+    query.prepare("SELECT position, captions, stop_after_chapter, rating FROM books WHERE fingerprint = ?");
     query.addBindValue(fingerprint);
     check(query.exec(), query);
     BookState state;
     if (query.next()) {
         state.position = query.value(0).toDouble();
+        state.rating = query.value(3).toInt();
         if (!query.value(1).isNull())
             state.captions = query.value(1).toBool();
         if (!query.value(2).isNull())
@@ -302,6 +303,41 @@ void Library::savePreferences(const QString &fingerprint, std::optional<bool> ca
     query.addBindValue(stopAfterChapter ? QVariant(*stopAfterChapter) : QVariant());
     query.addBindValue(fingerprint);
     check(query.exec(), query);
+}
+
+QString Library::notes(const QString &fingerprint) const
+{
+    QSqlQuery query(m_database);
+    query.prepare("SELECT notes FROM books WHERE fingerprint = ?");
+    query.addBindValue(fingerprint);
+    check(query.exec(), query);
+    if (!query.next())
+        throw std::runtime_error("The audiobook is no longer in the library. Open its notes again.");
+    return query.value(0).toString();
+}
+
+void Library::saveNotes(const QString &fingerprint, const QString &text)
+{
+    QSqlQuery query(m_database);
+    query.prepare("UPDATE books SET notes = ? WHERE fingerprint = ?");
+    query.addBindValue(text);
+    query.addBindValue(fingerprint);
+    check(query.exec(), query);
+    if (query.numRowsAffected() != 1)
+        throw std::runtime_error("The audiobook is no longer in the library. Your draft has been kept.");
+}
+
+void Library::saveRating(const QString &fingerprint, int rating)
+{
+    if (rating < 0 || rating > 50 || rating % 5 != 0)
+        throw std::invalid_argument("Ratings must be half-star steps from 0 to 5 stars");
+    QSqlQuery query(m_database);
+    query.prepare("UPDATE books SET rating = ? WHERE fingerprint = ?");
+    query.addBindValue(rating);
+    query.addBindValue(fingerprint);
+    check(query.exec(), query);
+    if (query.numRowsAffected() != 1)
+        throw std::runtime_error("The audiobook is no longer in the library");
 }
 
 QVariantList Library::recentBooks() const

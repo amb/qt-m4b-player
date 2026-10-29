@@ -8,6 +8,7 @@ Item {
     property bool playbackEnabled: false
     // Normalized framing survives resizing; a new book starts centered.
     property real verticalPosition: 0
+    readonly property rect imageRect: Qt.rect(image.x, image.y, image.width, image.height)
     readonly property real imageScale: image.implicitWidth > 0 && image.implicitHeight > 0
         ? (fill ? Math.max(width / image.implicitWidth, height / image.implicitHeight)
                 : Math.min(width / image.implicitWidth, fittedHeight / image.implicitHeight)) : 0

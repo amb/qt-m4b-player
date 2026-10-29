@@ -1,6 +1,8 @@
 #include "PlayerController.h"
 
 #include "MetadataReader.h"
+#include "TiltEqualizer.h"
+#include "LoudnessReader.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -14,6 +16,20 @@ PlayerController::PlayerController(Library *library, const QString &cacheDirecto
     : QObject(parent), m_library(library), m_cacheDirectory(cacheDirectory), m_engine(silent)
 {
     m_recents = m_library->recentBooks();
+    connect(this, &PlayerController::stateChanged, this, [this] {
+        if (chapterStart() != m_loudnessStart || chapterEnd() != m_loudnessEnd)
+            invalidateLoudness();
+    });
+    m_equalizerUpdate.setSingleShot(true);
+    m_equalizerUpdate.setInterval(60);
+    connect(&m_equalizerUpdate, &QTimer::timeout, this, [this] {
+        m_engine.setEqualizer(m_equalizerEnabled, m_equalizerTone, m_equalizerFrequency, m_equalizerBoost);
+    });
+    connect(&m_engine, &MpvEngine::equalizerFailed, this, [this](const QString &message) {
+        m_equalizerEnabled = false;
+        emit equalizerChanged();
+        report("EQ could not be applied: " + message);
+    });
     connect(&m_engine, &MpvEngine::failed, this, &PlayerController::report);
     connect(&m_engine, &MpvEngine::fileLoaded, this, [this](const QString &path) {
         if (QFileInfo(path).absoluteFilePath() != m_path)
@@ -129,6 +145,9 @@ void PlayerController::openBook(const QUrl &url)
         report("Choose an available local audiobook file.");
         return;
     }
+    cancelLoudness();
+    m_loudnessStatus.clear();
+    emit loudnessChanged();
     save();
     if (m_cancel)
         m_cancel->store(true);
@@ -144,6 +163,7 @@ void PlayerController::openBook(const QUrl &url)
     m_cues.clear();
     m_chapterPositions.clear();
     m_currentChapter = -1;
+    m_rating = 0;
     m_position = m_duration = m_resume = 0;
     m_loaded = m_playing = m_metadataReady = false;
     m_positionTouched = m_captionsTouched = m_stopTouched = false;
@@ -179,6 +199,7 @@ void PlayerController::openBook(const QUrl &url)
         try {
             const auto state = m_library->find(m_fingerprint);
             m_resume = state.position;
+            m_rating = state.rating;
             if (!m_captionsTouched)
                 m_captions = state.captions.value_or(false);
             if (!m_stopTouched)
@@ -364,8 +385,180 @@ void PlayerController::restoreLastBook()
         openBook(QUrl::fromLocalFile(path));
 }
 
+void PlayerController::setRating(int rating)
+{
+    if (!notesAvailable())
+        return;
+    try {
+        m_library->saveRating(m_fingerprint, rating);
+        m_rating = rating;
+        emit stateChanged();
+    } catch (const std::exception &error) {
+        report("Could not save rating: " + QString::fromUtf8(error.what()));
+    }
+}
+
+QVariantMap PlayerController::notesForEditing()
+{
+    if (!notesAvailable())
+        return {};
+    try {
+        return {{"fingerprint", m_fingerprint}, {"title", m_title}, {"text", m_library->notes(m_fingerprint)}};
+    } catch (const std::exception &error) {
+        report("Could not open notes: " + QString::fromUtf8(error.what()));
+        return {};
+    }
+}
+
+QString PlayerController::saveNotes(const QString &fingerprint, const QString &text)
+{
+    try {
+        // The editor captures this identity when opened; never use m_fingerprint
+        // here, since another book may have replaced the listening session.
+        m_library->saveNotes(fingerprint, text);
+        return {};
+    } catch (const std::exception &error) {
+        return "Could not save notes: " + QString::fromUtf8(error.what());
+    }
+}
+
+void PlayerController::setEqualizerEnabled(bool enabled)
+{
+    if (m_equalizerEnabled == enabled)
+        return;
+    invalidateLoudness();
+    m_equalizerEnabled = enabled;
+    m_equalizerUpdate.start();
+    emit equalizerChanged();
+}
+
+void PlayerController::setEqualizerTone(double tone)
+{
+    if (!std::isfinite(tone))
+        return;
+    tone = std::clamp(tone, -12.0, 12.0);
+    if (m_equalizerTone == tone)
+        return;
+    invalidateLoudness();
+    m_equalizerTone = tone;
+    m_equalizerUpdate.start();
+    emit equalizerChanged();
+}
+
+void PlayerController::setEqualizerFrequency(double frequency)
+{
+    if (!std::isfinite(frequency))
+        return;
+    frequency = std::clamp(frequency, 200.0, 4000.0);
+    if (m_equalizerFrequency == frequency)
+        return;
+    invalidateLoudness();
+    m_equalizerFrequency = frequency;
+    m_equalizerUpdate.start();
+    emit equalizerChanged();
+}
+
+void PlayerController::setEqualizerBoost(double boost)
+{
+    if (!std::isfinite(boost))
+        return;
+    boost = std::clamp(boost, 0.0, 24.0);
+    if (m_equalizerBoost == boost)
+        return;
+    invalidateLoudness();
+    m_equalizerBoost = boost;
+    m_equalizerUpdate.start();
+    emit equalizerChanged();
+}
+
+void PlayerController::resetEqualizer()
+{
+    invalidateLoudness();
+    m_equalizerTone = 0;
+    m_equalizerFrequency = 1000;
+    m_equalizerBoost = 0;
+    m_equalizerUpdate.start();
+    emit equalizerChanged();
+}
+
+QVariantList PlayerController::equalizerResponse() const
+{
+    const auto c = TiltEqualizer::coefficients(m_equalizerEnabled ? m_equalizerTone : 0, m_equalizerFrequency, false);
+    QVariantList points;
+    for (int i = 0; i <= 96; ++i)
+        points.append(c.decibels(20 * std::pow(1000, i / 96.0)));
+    return points;
+}
+
+void PlayerController::invalidateLoudness()
+{
+    if (m_loudnessAnalyzing) {
+        cancelLoudness();
+    } else if (!m_loudnessStatus.isEmpty()) {
+        m_loudnessStatus.clear();
+        emit loudnessChanged();
+    }
+}
+
+void PlayerController::cancelLoudness()
+{
+    if (!m_loudnessAnalyzing)
+        return;
+    m_loudnessCancel->store(true);
+    ++m_loudnessGeneration;
+    m_loudnessAnalyzing = false;
+    m_loudnessStatus = "Measurement cancelled.";
+    emit loudnessChanged();
+}
+
+void PlayerController::autoLoudness()
+{
+    if (!loudnessAvailable() || m_loudnessAnalyzing)
+        return;
+    const auto cancel = m_loudnessCancel = std::make_shared<std::atomic_bool>(false);
+    const quint64 request = ++m_loudnessGeneration;
+    const quint64 load = m_generation;
+    const QString path = m_path;
+    const double start = m_loudnessStart = chapterStart();
+    const double end = m_loudnessEnd = chapterEnd();
+    const double tone = m_equalizerTone, frequency = m_equalizerFrequency;
+    m_loudnessAnalyzing = true;
+    m_loudnessStatus = "Measuring this chapter…";
+    emit loudnessChanged();
+    auto *watcher = new QFutureWatcher<LoudnessResult>(this);
+    connect(watcher, &QFutureWatcher<LoudnessResult>::finished, this, [this, watcher, request, load, start, end, cancel] {
+        const auto result = watcher->result();
+        watcher->deleteLater();
+        if (request != m_loudnessGeneration || load != m_generation || cancel->load())
+            return;
+        m_loudnessAnalyzing = false;
+        if (result.cancelled || chapterStart() != start || chapterEnd() != end) {
+            m_loudnessStatus = "Measurement cancelled.";
+        } else if (!result.error.isEmpty()) {
+            m_loudnessStatus = "Could not measure loudness: " + result.error;
+        } else {
+            const double requested = std::max(0.0, -18.0-result.integrated);
+            const double boost = std::min(24.0, requested);
+            setEqualizerBoost(boost);
+            setEqualizerEnabled(true);
+            if (requested > 24)
+                m_loudnessStatus = QString("Measured %1 LKFS. Boost capped at +24 dB; −18 LKFS may not be reached.").arg(result.integrated, 0, 'f', 1);
+            else if (requested == 0)
+                m_loudnessStatus = QString("Measured %1 LKFS. No boost needed.").arg(result.integrated, 0, 'f', 1);
+            else
+                m_loudnessStatus = QString("Measured %1 LKFS. Boost +%2 dB toward −18 LKFS; peaks remain limited.")
+                    .arg(result.integrated, 0, 'f', 1).arg(boost, 0, 'f', 1);
+        }
+        emit loudnessChanged();
+    });
+    watcher->setFuture(QtConcurrent::run([path, start, end, tone, frequency, cancel] {
+        return LoudnessReader::read(path, start, end, tone, frequency, cancel);
+    }));
+}
+
 void PlayerController::shutdown()
 {
+    cancelLoudness();
     if (m_cancel)
         m_cancel->store(true);
     m_checkpoint.stop();

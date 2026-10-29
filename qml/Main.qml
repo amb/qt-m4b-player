@@ -20,6 +20,20 @@ ApplicationWindow {
     // C++ restores the saved size/state before showing the window.
     visible: false
     title: window.player.loaded ? window.player.title + (window.player.author ? " — " + window.player.author : "") : "qt-m4b-player"
+    onClosing: { notesEditor.close(); equalizerWindow.close() }
+
+    NotesEditor {
+        id: notesEditor
+        player: window.player
+        transientParent: window
+        palette: window.palette
+    }
+    EqualizerWindow {
+        id: equalizerWindow
+        player: window.player
+        transientParent: window
+        palette: window.palette
+    }
 
     function formatTime(seconds: real): string {
         let value = Math.max(0, Math.floor(seconds))
@@ -45,42 +59,42 @@ ApplicationWindow {
         id: playAction
         text: window.player.playing ? "&Pause" : "&Play"
         shortcut: "Space"
-        enabled: window.player.loaded
+        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible
         onTriggered: window.player.togglePlayback()
     }
     Action {
         id: stopAction
         text: "&Stop and Return to Chapter Start"
         shortcut: "Ctrl+S"
-        enabled: window.player.loaded
+        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible
         onTriggered: window.player.stop()
     }
     Action {
         id: previousAction
         text: "&Previous Chapter"
         shortcut: "Ctrl+Left"
-        enabled: window.player.loaded && window.player.currentChapter > 0
+        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible && window.player.currentChapter > 0
         onTriggered: window.player.navigateChapter(-1)
     }
     Action {
         id: nextAction
         text: "&Next Chapter"
         shortcut: "Ctrl+Right"
-        enabled: window.player.loaded && window.player.currentChapter + 1 < window.player.chapters.length
+        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible && window.player.currentChapter + 1 < window.player.chapters.length
         onTriggered: window.player.navigateChapter(1)
     }
     Action {
         id: backAction
         text: "&Back 10 Seconds"
         shortcut: "Left"
-        enabled: window.player.loaded
+        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible
         onTriggered: window.player.skip(-10)
     }
     Action {
         id: forwardAction
         text: "&Forward 10 Seconds"
         shortcut: "Right"
-        enabled: window.player.loaded
+        enabled: window.player.loaded && !notesEditor.visible && !ratingPopup.visible
         onTriggered: window.player.skip(10)
     }
     Action {
@@ -111,6 +125,28 @@ ApplicationWindow {
         id: volumeAction
         text: "&Volume…"
         onTriggered: volumePopup.open()
+    }
+    Action {
+        id: notesAction
+        text: "&Notes…"
+        shortcut: "Ctrl+N"
+        enabled: window.player.notesAvailable
+        onTriggered: {
+            ratingPopup.close()
+            notesEditor.openDocument(window.player.notesForEditing())
+        }
+    }
+    Action {
+        id: ratingAction
+        text: "&Rating and Notes…"
+        enabled: window.player.notesAvailable
+        onTriggered: ratingPopup.open()
+    }
+    Action {
+        id: equalizerAction
+        text: "Open &EQ…"
+        shortcut: "Ctrl+E"
+        onTriggered: equalizerWindow.openPanel()
     }
     Action {
         id: fillCoverAction
@@ -159,6 +195,7 @@ ApplicationWindow {
                 }
             }
             MenuSeparator {}
+            MenuCommand { action: notesAction }
             MenuCommand { action: appearanceAction }
             MenuSeparator {}
             MenuCommand {
@@ -200,9 +237,11 @@ ApplicationWindow {
             MenuCommand { action: stopAfterAction }
             MenuSeparator {}
             MenuCommand { action: volumeAction }
+            MenuCommand { action: equalizerAction }
             MenuCommand {
                 action: Action {
                     text: "&Increase Volume"
+                    enabled: !notesEditor.visible
                     shortcut: "Ctrl+Up"
                     onTriggered: window.player.setVolume(Math.min(100, window.player.volume + 5))
                 }
@@ -210,6 +249,7 @@ ApplicationWindow {
             MenuCommand {
                 action: Action {
                     text: "&Decrease Volume"
+                    enabled: !notesEditor.visible
                     shortcut: "Ctrl+Down"
                     onTriggered: window.player.setVolume(Math.max(0, window.player.volume - 5))
                 }
@@ -340,14 +380,20 @@ ApplicationWindow {
             }
             MouseArea { anchors.fill: parent; onClicked: window.player.togglePlayback() }
         }
-        Rectangle {
+        Item {
             id: controlsPanel
+            objectName: "transportPanel"
             width: parent.width
             height: controls.implicitHeight + 32
-            radius: 20
-            // Translucent window colour keeps the panel adaptive over artwork.
-            color: Qt.rgba(window.palette.window.r, window.palette.window.g,
-                           window.palette.window.b, 0.85)
+            FrostedPanel {
+                anchors.fill: parent
+                source: window.preferences.fillCover ? window.player.coverUrl : ""
+                artworkRect: Qt.rect(artwork.imageRect.x - panels.x - controlsPanel.x,
+                                     artwork.imageRect.y - panels.y - controlsPanel.y,
+                                     artwork.imageRect.width, artwork.imageRect.height)
+                tint: Qt.rgba(window.palette.window.r, window.palette.window.g,
+                              window.palette.window.b, window.preferences.fillCover ? 0.76 : 1)
+            }
             ColumnLayout {
                 id: controls
                 anchors.left: parent.left
@@ -396,6 +442,7 @@ ApplicationWindow {
                     columnSpacing: 12
                     rowSpacing: 6
                     RowLayout {
+                        objectName: "primaryTransport"
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 4
                         TransportButton { action: previousAction; iconName: "previous"; description: "Previous chapter" }
@@ -422,13 +469,29 @@ ApplicationWindow {
                         TransportButton { action: stopAction; iconName: "stop"; description: "Stop at chapter start" }
                     }
                     RowLayout {
+                        objectName: "secondaryTransport"
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 4
                         TransportButton { action: chaptersAction; iconName: "chapters"; description: "Chapters" }
                         TransportButton { action: stopAfterAction; iconName: "stopAfter"; description: "Stop after chapter" }
                         TransportButton { action: captionsAction; text: "CC"; description: window.player.indexingCaptions ? "Indexing captions" : "Embedded captions"; font.pixelSize: 17; font.bold: true }
+                        TransportButton {
+                            id: ratingButton
+                            objectName: "ratingButton"
+                            action: ratingAction
+                            description: window.player.rating === 0 ? "Rating and notes: unrated"
+                                : "Rating and notes: " + (window.player.rating / 10).toFixed(1) + " out of 5 stars"
+                            contentItem: Item {
+                                StarIcon {
+                                    anchors.centerIn: parent
+                                    width: 24; height: 24
+                                    fraction: window.player.rating > 0 ? 1 : 0
+                                    color: ratingButton.foregroundColor
+                                }
+                            }
+                        }
                         TransportButton { text: window.player.speed + "×"; description: "Playback speed"; enabled: window.player.loaded; onClicked: speedMenu.open() }
-                        TransportButton { action: volumeAction; iconName: "volume"; description: "Volume" }
+                        TransportButton { id: volumeButton; objectName: "volumeButton"; action: volumeAction; iconName: "volume"; description: "Volume" }
                     }
                 }
             }
@@ -451,15 +514,99 @@ ApplicationWindow {
         }
     }
     Popup {
+        id: ratingPopup
+        objectName: "ratingPopup"
+        parent: Overlay.overlay
+        width: 240
+        modal: true
+        focus: true
+        property url bookUrl
+        onAboutToShow: {
+            bookUrl = window.player.fileUrl
+            let point = ratingButton.mapToItem(Overlay.overlay, 0, 0)
+            x = Math.max(8, Math.min(window.width - width - 8, point.x + (ratingButton.width - width) / 2))
+            y = Math.max(8, point.y - height - 8)
+        }
+        onOpened: ratingSlider.forceActiveFocus()
+        onClosed: if (!notesEditor.visible) ratingButton.forceActiveFocus()
+        Connections {
+            target: window.player
+            function onStateChanged() {
+                if (ratingPopup.visible && (!window.player.notesAvailable || ratingPopup.bookUrl !== window.player.fileUrl))
+                    ratingPopup.close()
+            }
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Slider {
+                id: ratingSlider
+                objectName: "ratingSlider"
+                Layout.alignment: Qt.AlignHCenter
+                implicitWidth: 180
+                implicitHeight: 32
+                padding: 0
+                from: 0; to: 5; stepSize: 0.5
+                snapMode: Slider.SnapAlways
+                value: window.player.rating / 10
+                onMoved: window.player.setRating(Math.round(value * 10))
+                Keys.onPressed: event => {
+                    event.accepted = false
+                    if (event.key === Qt.Key_Home || event.key === Qt.Key_End) {
+                        window.player.setRating(event.key === Qt.Key_Home ? 0 : 50)
+                        event.accepted = true
+                    }
+                }
+                Accessible.name: "Audiobook rating"
+                Accessible.description: "Half-star steps. Left and Right adjust; Home clears the rating."
+                handle: Item { width: 0; height: 0 }
+                background: Row {
+                    width: ratingSlider.availableWidth
+                    height: ratingSlider.availableHeight
+                    Repeater {
+                        model: 5
+                        Item {
+                            id: ratingStar
+                            required property int index
+                            width: ratingSlider.availableWidth / 5
+                            height: ratingSlider.availableHeight
+                            StarIcon {
+                                anchors.centerIn: parent
+                                width: 28; height: 28
+                                fraction: Math.max(0, Math.min(1, window.player.rating / 10 - ratingStar.index))
+                                color: ratingSlider.activeFocus ? ratingSlider.palette.highlight : ratingSlider.palette.buttonText
+                            }
+                        }
+                    }
+                }
+            }
+            Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: window.player.rating === 0 ? "Unrated" : (window.player.rating / 10).toFixed(1) + " / 5"
+            }
+            Button {
+                objectName: "openNotesButton"
+                Layout.alignment: Qt.AlignHCenter
+                text: "Open notes (Ctrl+N)"
+                onClicked: notesAction.trigger()
+            }
+        }
+    }
+    Popup {
         id: volumePopup
-        anchors.centerIn: Overlay.overlay
+        objectName: "volumePopup"
+        parent: Overlay.overlay
         width: 300
         modal: true
         focus: true
-        ColumnLayout {
-            anchors.fill: parent
+        onAboutToShow: {
+            let point = volumeButton.mapToItem(Overlay.overlay, 0, 0)
+            x = Math.max(8, Math.min(window.width - width - 8, point.x + (volumeButton.width - width) / 2))
+            y = Math.max(8, point.y - height - 8)
+        }
+        contentItem: ColumnLayout {
             Label { text: "Volume" }
             Slider { Layout.fillWidth: true; from: 0; to: 100; value: window.player.volume; Accessible.name: "Volume"; onMoved: window.player.setVolume(value) }
+            Button { action: equalizerAction; text: "Open EQ (Ctrl+E)"; onClicked: volumePopup.close() }
         }
     }
     Popup {
@@ -521,7 +668,8 @@ ApplicationWindow {
         anchors.centerIn: Overlay.overlay
         width: Math.min(window.width - 32, 440)
         message: "Open a book with File → Open Audiobook or Open Recent. Books open paused and remember your position.\n\n"
-            + "Space: Play / pause\nLeft / Right: Back / forward 10 seconds\nCtrl+Left / Right: Previous / next chapter\nCtrl+J: Chapters\nCtrl+S: Stop and return to chapter start\nCtrl+Up / Down: Volume + / − 5%\nCtrl+Shift+C: Toggle captions\nCtrl+,: Appearance\nF11: Full screen\n\n"
+            + "Space: Play / pause\nLeft / Right: Back / forward 10 seconds\nCtrl+Left / Right: Previous / next chapter\nCtrl+J: Chapters\nCtrl+N: Notes\nCtrl+E: EQ\nCtrl+S: Stop (Save while editing notes)\nCtrl+Up / Down: Volume + / − 5%\nCtrl+Shift+C: Toggle captions\nCtrl+,: Appearance\nF11: Full screen\n\n"
+            + "Notes use explicit Save/Cancel; an empty note clears it. EQ starts bypassed and applies across books for this session. Tone runs from warm to clear; Hz changes its balance point. Boost adds up to 24 dB with peak limiting; higher settings reduce dynamics. Reset restores neutral tone, 1000 Hz and zero Boost without changing bypass. Automatic headroom makes room for boosted frequencies.\n\n"
             + "Use Playback for speed and Stop After Chapter. Enable embedded captions in View once indexing finishes. In Fill mode, drag vertically on the cover to reframe it."
     }
     InfoPopup {

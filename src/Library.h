@@ -7,6 +7,7 @@
 
 struct BookState {
     double position = 0;
+    int rating = 0;
     std::optional<bool> captions;
     std::optional<bool> stopAfterChapter;
 };
@@ -21,6 +22,9 @@ public:
     void saveProgress(const QString &fingerprint, const QString &path, const QString &title,
                       const QString &author, double position);
     void savePreferences(const QString &fingerprint, std::optional<bool> captions, std::optional<bool> stopAfterChapter);
+    QString notes(const QString &fingerprint) const;
+    void saveNotes(const QString &fingerprint, const QString &text);
+    void saveRating(const QString &fingerprint, int rating);
     QVariantList recentBooks() const;
     QString lastAvailablePath() const;
     QString sqliteVersion() const;

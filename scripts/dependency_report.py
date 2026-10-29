@@ -11,10 +11,10 @@ import subprocess
 import tempfile
 
 MODULES = ("Qt6Core", "Qt6Gui", "Qt6Qml", "Qt6Quick", "Qt6QuickControls2", "Qt6Sql",
-           "Qt6Concurrent", "Qt6Test", "mpv", "libavformat", "libavcodec", "libavutil")
+           "Qt6Concurrent", "Qt6Test", "mpv", "libavformat", "libavcodec", "libavutil", "libavfilter")
 PACKAGES = ("build-essential", "cmake", "ninja-build", "g++", "pkg-config", "python3",
             "qt6-base-dev", "qt6-declarative-dev", "qt6-declarative-dev-tools",
-            "libmpv-dev", "libavformat-dev", "libavcodec-dev", "libavutil-dev",
+            "libmpv-dev", "libavformat-dev", "libavcodec-dev", "libavutil-dev", "libavfilter-dev",
             "qml6-module-qtquick-controls", "qml6-module-qtquick-dialogs",
             "qml6-module-qtquick-layouts", "qml6-module-qtqml-workerscript", "libqt6sql6-sqlite", "libqt6svg6")
 QML_MODULES = ("QtQuick", "QtQuick/Controls", "QtQuick/Controls/Basic", "QtQuick/Controls/Basic/impl",
