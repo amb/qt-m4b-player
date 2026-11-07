@@ -10,6 +10,7 @@
 #include <QUuid>
 #include <QVariant>
 #include <QtTest>
+#include <QtEndian>
 #include <exception>
 #include <limits>
 
@@ -155,6 +156,47 @@ private slots:
         QVERIFY2(book.error.isEmpty(), qPrintable(book.error));
         QCOMPARE(book.chapters.size(), 2);
         QVERIFY(book.captions.isEmpty());
+    }
+    void incorrectlyTaggedEmbeddedCover_data()
+    {
+        QTest::addColumn<quint32>("type");
+        QTest::addColumn<bool>("validImage");
+        QTest::newRow("unspecified") << quint32(0) << true;
+        QTest::newRow("unknown") << quint32(1) << true;
+        QTest::newRow("invalid-image") << quint32(0) << false;
+    }
+    void incorrectlyTaggedEmbeddedCover()
+    {
+        QFETCH(quint32, type);
+        QFETCH(bool, validImage);
+        QFile fixture(QString(FIXTURE_DIR) + "/captions.m4b");
+        QVERIFY(fixture.open(QIODevice::ReadOnly));
+        auto bytes = fixture.readAll();
+        const auto cover = bytes.indexOf("covr");
+        QVERIFY(cover >= 0);
+        QCOMPARE(bytes.mid(cover + 8, 4), QByteArray("data"));
+        qToBigEndian(type, bytes.data() + cover + 12);
+        if (!validImage) {
+            const auto imageSize = qFromBigEndian<quint32>(bytes.constData() + cover + 4) - 16;
+            bytes.replace(cover + 20, imageSize, QByteArray(imageSize, '\0'));
+        }
+        QTemporaryDir directory;
+        QFile bookFile(directory.filePath("book with spaces.m4b"));
+        QVERIFY(bookFile.open(QIODevice::WriteOnly));
+        QCOMPARE(bookFile.write(bytes), bytes.size());
+        bookFile.close();
+
+        const auto cancel = std::make_shared<std::atomic_bool>(false);
+        const auto original = MetadataReader::read(fixture.fileName(), cancel, true);
+        QVERIFY(!original.cover.isEmpty());
+        const auto recovered = MetadataReader::read(bookFile.fileName(), cancel, true);
+        QVERIFY2(recovered.error.isEmpty(), qPrintable(recovered.error));
+        QCOMPARE(recovered.cover, validImage ? original.cover : QByteArray());
+        QCOMPARE(recovered.chapters.size(), original.chapters.size());
+        QCOMPARE(recovered.captions.size(), original.captions.size());
+        QCOMPARE(recovered.duration, original.duration);
+        QVERIFY(bookFile.open(QIODevice::ReadOnly));
+        QCOMPARE(bookFile.readAll(), bytes);
     }
     void longCaptionAndCancellation()
     {

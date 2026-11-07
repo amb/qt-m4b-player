@@ -71,6 +71,10 @@ flatpak override --user --filesystem=/mnt/nas io.github.amb.QtM4bPlayer
 Use **File → Open Audiobook**, **File → Open Recent**, or Ctrl+O. Without a file
 argument, the player opens the last available recent location paused.
 
+File → Open Audiobook uses the desktop's native file selector when Qt's platform
+integration provides one, including KDE's selector on Plasma. Otherwise, Qt
+shows its built-in file dialog.
+
 The menu bar and lower transport controls provide the playback actions.
 **Help → Player Help** lists the shortcuts.
 
@@ -202,24 +206,43 @@ sudo apt install build-essential cmake ninja-build pkg-config python3 \
 
 For KDE Plasma styling, also install `qml6-module-org-kde-breeze` or
 `qml6-module-org-kde-qqc2desktopstyle`. Otherwise, the app uses Qt's default style.
+KDE's native file selector also needs the Qt 6 Plasma integration plugin
+(`plasma-integration` on Ubuntu). These KDE components are optional runtime
+integrations; the app builds against Qt without KDE development libraries.
 
 ### Build and run
 
 ```bash
-cmake --preset linux-debug
-cmake --build --preset linux-debug
-./build/debug/qt-m4b-player /path/to/book.m4b
+./build.sh
+./build/release/qt-m4b-player /path/to/book.m4b
 ```
 
-Use the `linux-release` configure/build preset for an optimized native build.
-The optional CMake install target installs the executable and desktop integration;
-it uses system libraries. See [releasing](docs/RELEASING.md) for Flatpak bundles.
+`build.sh` creates an optimized native release using the `linux-release` CMake
+preset. Use `./build.sh --dev` for a debug build with tests in `build/debug`
+using `linux-debug`. Both scripts work from any working directory. Build
+concurrency defaults to two jobs; override it with `CMAKE_BUILD_PARALLEL_LEVEL`.
+
+To build and install the native release, including the desktop launcher and icons:
+
+```bash
+./install.sh
+~/.local/bin/qt-m4b-player
+```
+
+Installation defaults to `~/.local`; use `./install.sh --prefix /path/to/prefix`
+to choose another location. Add `~/.local/bin` to your `PATH` if needed. The
+scripts do not invoke `sudo` or install dependencies, and native installations
+use system libraries. `DESTDIR` is supported for staged installs.
+
+These scripts do not build Flatpak bundles. Use `scripts/build-flatpak.sh` for
+Flatpak; see [releasing](docs/RELEASING.md).
 
 ## Development
 
 ### Tests and QML checks
 
 ```bash
+./build.sh --dev
 ctest --preset linux-debug
 cmake --build build/debug --target qt-m4b-player_qmllint
 ```

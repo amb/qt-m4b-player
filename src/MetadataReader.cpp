@@ -1,8 +1,11 @@
 #include "MetadataReader.h"
 
+#include <QBuffer>
 #include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QLocale>
+#include <QtEndian>
 #include <algorithm>
 #include <cmath>
 extern "C" {
@@ -33,6 +36,74 @@ struct Input {
     AVFormatContext *context = avformat_alloc_context();
     ~Input() { avformat_close_input(&context); }
 };
+
+// Some older M4Bs store a JPEG in covr/data with type 0 instead of 13.
+// FFmpeg skips these covers. Follow only the artwork box path, seeking over
+// audio data so this fallback stays cheap for large books on network mounts.
+QByteArray readCoverBoxes(QFile &file, qint64 begin, qint64 end, int level,
+                         int &remainingBoxes, const Cancellation &cancel)
+{
+    static constexpr const char *boxes[] = {"moov", "udta", "meta", "ilst", "covr", "data"};
+    for (qint64 offset = begin; end - offset >= 8 && !cancel->load();) {
+        if (--remainingBoxes < 0 || !file.seek(offset))
+            return {};
+        const auto header = file.read(8);
+        if (header.size() != 8)
+            return {};
+        quint64 size = qFromBigEndian<quint32>(header.constData());
+        qint64 headerSize = 8;
+        if (size == 1) {
+            if (end - offset < 16)
+                return {};
+            const auto extended = file.read(8);
+            if (extended.size() != 8)
+                return {};
+            size = qFromBigEndian<quint64>(extended.constData());
+            headerSize = 16;
+        } else if (size == 0) {
+            size = quint64(end - offset);
+        }
+        if (size < quint64(headerSize) || size > quint64(end - offset))
+            return {};
+        const qint64 boxEnd = offset + qint64(size);
+        if (header.mid(4, 4) == boxes[level]) {
+            qint64 payload = offset + headerSize;
+            if (level == 5) {
+                // Skip the data type and locale; let Qt recognize the image.
+                payload += 8;
+                constexpr qint64 maxCoverBytes = 32 * 1024 * 1024;
+                const qint64 length = boxEnd - payload;
+                if (length > 0 && length <= maxCoverBytes && file.seek(payload)) {
+                    auto bytes = file.read(length);
+                    QBuffer buffer(&bytes);
+                    buffer.open(QIODevice::ReadOnly);
+                    if (bytes.size() == length && !QImageReader::imageFormat(&buffer).isEmpty()
+                        && !cancel->load())
+                        return bytes;
+                }
+            } else {
+                if (level == 2)
+                    payload += 4; // meta is a FullBox: version and flags.
+                if (payload <= boxEnd) {
+                    auto bytes = readCoverBoxes(file, payload, boxEnd, level + 1, remainingBoxes, cancel);
+                    if (!bytes.isEmpty())
+                        return bytes;
+                }
+            }
+        }
+        offset = boxEnd;
+    }
+    return {};
+}
+
+QByteArray fallbackCover(const QString &path, const Cancellation &cancel)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    int remainingBoxes = 10000;
+    return readCoverBoxes(file, 0, file.size(), 0, remainingBoxes, cancel);
+}
 }
 
 MediaData MetadataReader::read(const QString &path, const Cancellation &cancel, bool indexCaptions)
@@ -99,6 +170,8 @@ MediaData MetadataReader::read(const QString &path, const Cancellation &cancel, 
                 }
             }
         }
+        if (result.cover.isEmpty() && !cancel->load())
+            result.cover = fallbackCover(path, cancel);
         if (!indexCaptions || subtitle < 0 || cancel->load())
             return result;
         AVPacket *packet = av_packet_alloc();

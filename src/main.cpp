@@ -3,9 +3,10 @@
 #include "WindowPreferences.h"
 #include "AppPreferences.h"
 #include "TransportIconProvider.h"
+#include "BuildInfo.h"
+#include <QApplication>
 #include <QCommandLineParser>
 #include <QFileInfo>
-#include <QGuiApplication>
 #include <QIcon>
 #include <QLibraryInfo>
 #include <QQmlApplicationEngine>
@@ -38,7 +39,10 @@ bool qmlStyleAvailable(const QString &modulePath)
 
 int main(int argc, char *argv[])
 {
-    QGuiApplication app(argc, argv);
+    // KDE's native file dialog uses widgets and requires QApplication, even
+    // though the main interface is Qt Quick. Other desktops use Qt's normal
+    // native-dialog selection and fallback.
+    QApplication app(argc, argv);
     // Qt adopts the system locale; libmpv requires C numeric parsing. Set this
     // before creating the engine or starting workers, retaining other categories.
     std::setlocale(LC_NUMERIC, "C");
@@ -83,7 +87,8 @@ int main(int argc, char *argv[])
         QQmlApplicationEngine engine;
         engine.addImageProvider("transport", new TransportIconProvider);
         engine.setInitialProperties({{"player", QVariant::fromValue(&player)},
-                                     {"preferences", QVariant::fromValue(&preferences)}});
+                                     {"preferences", QVariant::fromValue(&preferences)},
+                                     {"buildTimestamp", QStringLiteral(PLAYER_BUILD_TIMESTAMP)}});
         QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                          [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
         engine.loadFromModule("AudiobookPlayer", "Main");

@@ -27,6 +27,10 @@ MpvEngine::MpvEngine(bool silent, QObject *parent) : QObject(parent), m_handle(m
         option("keep-open", "yes");
         option("pause", "yes");
         option("audio-pitch-correction", "yes");
+        // mpv detects network mounts and can otherwise prefetch hours of audio.
+        // Bound both directions while retaining its normal cache/seek behavior.
+        option("demuxer-max-bytes", "8MiB");
+        option("demuxer-max-back-bytes", "8MiB");
         if (silent)
             option("ao", "null");
         const int status = mpv_initialize(m_handle);

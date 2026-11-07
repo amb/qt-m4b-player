@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql Concurrent)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql Concurrent)
 qt_standard_project_setup(REQUIRES 6.5)
 if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
     qt_policy(SET QTP0004 NEW)
@@ -38,6 +38,14 @@ target_link_libraries(media-inspect PRIVATE player-core)
 
 qt_add_executable(qt-m4b-player src/main.cpp src/WindowPreferences.h src/WindowPreferences.cpp
     src/TransportIconProvider.h src/TransportIconProvider.cpp)
+# Refresh at build time, including incremental builds without reconfiguration.
+add_custom_target(player-build-info
+    COMMAND "${CMAKE_COMMAND}" "-DOUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/generated/BuildInfo.h"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/WriteBuildInfo.cmake"
+    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/generated/BuildInfo.h"
+    VERBATIM)
+add_dependencies(qt-m4b-player player-build-info)
+target_include_directories(qt-m4b-player PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(PLAYER_QML_FILES qml/Main.qml qml/TransportButton.qml qml/TransportIcon.qml qml/MenuCommand.qml
     qml/CoverArtwork.qml qml/ProgressHeader.qml qml/InfoPopup.qml qml/NotesEditor.qml qml/EqualizerWindow.qml qml/StarIcon.qml qml/TransportPopup.qml)
 qt_add_qml_module(qt-m4b-player
@@ -56,7 +64,7 @@ qt_add_resources(qt-m4b-player third-party-notices
 qt_add_resources(qt-m4b-player application-icon
     PREFIX "/app-icon" BASE "packaging/icons/512x512"
     FILES packaging/icons/512x512/io.github.amb.QtM4bPlayer.png)
-target_link_libraries(qt-m4b-player PRIVATE player-core Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
+target_link_libraries(qt-m4b-player PRIVATE player-core Qt6::Widgets Qt6::Quick Qt6::QuickControls2 Qt6::Concurrent)
 target_compile_options(qt-m4b-player PRIVATE -Wall -Wextra -Wpedantic)
 
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/dependency-versions.txt" CONTENT

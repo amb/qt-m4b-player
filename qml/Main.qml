@@ -9,6 +9,7 @@ ApplicationWindow {
     id: window
     required property PlayerController player
     required property AppPreferences preferences
+    property string buildTimestamp: ""
     readonly property bool wideControls: width >= 740
     readonly property var playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
     readonly property bool utilityPopupOpen: chapterSheet.visible || ratingPopup.visible || speedPopup.visible || volumePopup.visible
@@ -734,6 +735,7 @@ ApplicationWindow {
         anchors.centerIn: Overlay.overlay
         width: Math.min(window.width - 32, 360)
         message: "qt-m4b-player " + Qt.application.version
+            + (window.buildTimestamp ? "\nBuilt: " + window.buildTimestamp : "")
             + "\n\nAn audiobook player with chapters, cover art, and embedded captions."
             + "\n\nBuilt with Qt, libmpv, FFmpeg, and SQLite."
             + "\n\nIcons: © 2023 Phosphor Icons (MIT license)."

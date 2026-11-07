@@ -25,11 +25,19 @@ I/O does not run inside a synchronous UI command. Replies are tracked by request
 and load generation. The filesystem-mounted NAS needs no custom downloader;
 ordinary local paths go through the same engine and reader. Future work includes
 stalled/disconnected share handling and indexed-caption caching.
+mpv's forward and backward packet caches are each limited to 8 MiB, keeping its
+automatic network caching from prefetching hours of audiobook audio into RAM.
+These limits cover packet caching; metadata, decoded audio and artwork use
+additional memory. Seeks outside the cached range read from the source file.
 
 Book opening starts libmpv paused and separately reads the lightweight metadata
 and sampled identity. Saved progress is restored only after both results are
 ready, unless the user has already performed a transport action. Artwork is
 cached separately. Caption indexing begins afterward and does not block playback.
+If FFmpeg supplies no artwork, a bounded, read-only MP4 box reader checks
+`moov/udta/meta/ilst/covr/data` and lets Qt identify the image. This recovers
+older books whose embedded JPEG has an unspecified image type, which FFmpeg
+skips. The reader seeks over audio payloads and limits cover data to 32 MiB.
 Chapter text exposed by FFmpeg as chapter metadata/data is not treated as CC.
 The first preferred-language `mov_text` track is selected, with a first-track
 fallback. Parsing preserves sample PTS/duration, UTF-8/UTF-16 text and cue gaps.
@@ -123,7 +131,7 @@ details, the robustness guarantees and the implemented/missing features.
 These are ordering requirements, not preferences. Each was broken by an
 otherwise plausible alternative, so they are easy to reintroduce by accident.
 
-- `main.cpp` sets `LC_NUMERIC` to `C` **after** `QGuiApplication` is constructed
+- `main.cpp` sets `LC_NUMERIC` to `C` **after** `QApplication` is constructed
   and before libmpv or any worker exists. Qt adopts the system locale, so setting
   it earlier does not fix libmpv startup under a comma-decimal locale such as
   `fi_FI.UTF-8`. Any test or harness that constructs `PlayerController` directly
