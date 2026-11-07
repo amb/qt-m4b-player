@@ -5,6 +5,8 @@
 #include <QElapsedTimer>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QDataStream>
 #include <QtTest>
 #include <clocale>
@@ -197,6 +199,30 @@ private slots:
         player.togglePlayback();
         QTRY_VERIFY(!player.playing() && std::abs(player.position() - 3) < 0.05);
         QCOMPARE(player.currentChapter(), 1);
+    }
+    void seeksSaveProgressAfterTheyFinish()
+    {
+        QTemporaryDir directory;
+        const QString db = directory.filePath("library.sqlite");
+        Library library(db);
+        PlayerController player(&library, directory.filePath("covers"), true);
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.notesAvailable(), 10000);
+        // A burst of seeks is written once, without needing shutdown or a book change.
+        player.seek(1);
+        player.seek(2);
+        player.seek(4);
+        auto reader = QSqlDatabase::addDatabase("QSQLITE", "seek-save-reader");
+        reader.setDatabaseName(db);
+        QVERIFY(reader.open());
+        const auto stored = [&reader] {
+            QSqlQuery query(reader);
+            return query.exec("SELECT position FROM books") && query.next() ? query.value(0).toDouble() : -1.0;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(stored(), 4.0, 3000);
+        reader.close();
+        reader = QSqlDatabase();
+        QSqlDatabase::removeDatabase("seek-save-reader");
     }
     void savedResumeAndRapidReplacement()
     {

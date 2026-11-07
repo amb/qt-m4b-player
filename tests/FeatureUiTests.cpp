@@ -148,6 +148,38 @@ private slots:
         equalizer->close();
         window->close();
     }
+    void chapterListKeepsSelectionDuringPlayback()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        AppPreferences preferences(directory.filePath("settings.ini"));
+        player.openLocalPath(QString(SOURCE_DIR) + "/tests/fixtures/captions.m4b");
+        QTRY_VERIFY(player.notesAvailable() && player.chapters().size() == 2);
+        QQmlEngine engine;
+        engine.addImageProvider("transport", new TransportIconProvider);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString(SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"player", QVariant::fromValue(&player)}, {"preferences", QVariant::fromValue(&preferences)}}));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        window->show(); window->requestActivate();
+        QTest::qWait(100);
+        auto *sheet = root->findChild<QObject *>("chapterSheet");
+        auto *list = root->findChild<QObject *>("chapterList");
+        QVERIFY(sheet && list);
+        QVERIFY(QMetaObject::invokeMethod(sheet, "open"));
+        QTRY_VERIFY(sheet->property("opened").toBool());
+        QCOMPARE(list->property("currentIndex").toInt(), 0);
+        QTest::keyClick(window, Qt::Key_Down);
+        QCOMPARE(list->property("currentIndex").toInt(), 1);
+        // Position updates during playback must not reset the list's model.
+        player.togglePlayback();
+        QTRY_VERIFY(player.playing() && player.position() > 0.3);
+        QCOMPARE(list->property("currentIndex").toInt(), 1);
+        player.togglePlayback();
+    }
     void notesKeyboardCancelSaveAndFailureKeepDraft()
     {
         QTemporaryDir directory;

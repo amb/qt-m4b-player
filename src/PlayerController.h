@@ -118,11 +118,14 @@ private:
     void savePreferences();
     void report(const QString &message);
     void invalidateLoudness();
+    void applyEqualizerEnabled(bool enabled);
+    void applyEqualizerBoost(double boost);
     Library *m_library;
     QString m_cacheDirectory;
     MpvEngine m_engine;
     QTimer m_checkpoint;
     QTimer m_equalizerUpdate;
+    QTimer m_seekSave;
     bool m_equalizerEnabled = false;
     double m_equalizerTone = 0, m_equalizerFrequency = 1000;
     double m_equalizerBoost = 0;

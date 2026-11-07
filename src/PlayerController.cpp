@@ -63,7 +63,7 @@ PlayerController::PlayerController(Library *library, const QString &cacheDirecto
             m_position = std::clamp(time, 0.0, std::max(m_duration, time));
             // Prototype cutoff: observe traversal, pause, then position at the boundary.
             // Engine-side audible cutoff parity is a separate validation milestone.
-            if (m_stopAfter && m_playing && boundary > previous && time >= boundary) {
+            if (m_stopAfter && boundary > previous && time >= boundary) {
                 m_engine.setPaused(true);
                 m_playing = false;
                 seek(boundary);
@@ -89,6 +89,10 @@ PlayerController::PlayerController(Library *library, const QString &cacheDirecto
         emit stateChanged();
     });
     connect(&m_checkpoint, &QTimer::timeout, this, [this] { if (m_playing) save(); });
+    // Coalesce progress writes from bursts of seeks and skips.
+    m_seekSave.setSingleShot(true);
+    m_seekSave.setInterval(1000);
+    connect(&m_seekSave, &QTimer::timeout, this, &PlayerController::save);
     m_checkpoint.start(30000);
 }
 
@@ -206,9 +210,6 @@ void PlayerController::openBook(const QUrl &url)
                 m_stopAfter = state.stopAfterChapter.value_or(false);
             m_metadataReady = true;
             applyResume();
-            // Until the player is loaded, preserve stored progress rather than writing zero.
-            if (m_loaded)
-                save();
             if (m_loaded && (m_captionsTouched || m_stopTouched))
                 savePreferences();
         } catch (const std::exception &error) {
@@ -256,10 +257,15 @@ void PlayerController::applyResume()
         seek(std::clamp(m_resume, 0.0, m_duration));
         m_positionTouched = false;
     }
+    // Record the book as soon as both the player and its metadata are ready,
+    // not after the seek delay: notes and ratings need its library row. Before
+    // then nothing is written, so stored progress is never replaced with zero.
+    save();
 }
 
 void PlayerController::save()
 {
+    m_seekSave.stop();
     if (!m_loaded || !m_metadataReady || m_fingerprint.isEmpty())
         return;
     try {
@@ -318,7 +324,7 @@ void PlayerController::seek(double seconds)
     m_seekTarget = target;
     m_seekElapsed.start();
     m_currentChapter = chapterAt(m_chapters, target);
-    save();
+    m_seekSave.start();
     emit stateChanged();
 }
 
@@ -427,6 +433,13 @@ void PlayerController::setEqualizerEnabled(bool enabled)
     if (m_equalizerEnabled == enabled)
         return;
     invalidateLoudness();
+    applyEqualizerEnabled(enabled);
+}
+
+void PlayerController::applyEqualizerEnabled(bool enabled)
+{
+    if (m_equalizerEnabled == enabled)
+        return;
     m_equalizerEnabled = enabled;
     m_equalizerUpdate.start();
     emit equalizerChanged();
@@ -466,6 +479,13 @@ void PlayerController::setEqualizerBoost(double boost)
     if (m_equalizerBoost == boost)
         return;
     invalidateLoudness();
+    applyEqualizerBoost(boost);
+}
+
+void PlayerController::applyEqualizerBoost(double boost)
+{
+    if (m_equalizerBoost == boost)
+        return;
     m_equalizerBoost = boost;
     m_equalizerUpdate.start();
     emit equalizerChanged();
@@ -539,8 +559,10 @@ void PlayerController::autoLoudness()
         } else {
             const double requested = std::max(0.0, -18.0-result.integrated);
             const double boost = std::min(24.0, requested);
-            setEqualizerBoost(boost);
-            setEqualizerEnabled(true);
+            // Apply the measured correction without the public setters' manual-change
+            // invalidation, which would discard the status reported below.
+            applyEqualizerBoost(boost);
+            applyEqualizerEnabled(true);
             if (requested > 24)
                 m_loudnessStatus = QString("Measured %1 LKFS. Boost capped at +24 dB; −18 LKFS may not be reached.").arg(result.integrated, 0, 'f', 1);
             else if (requested == 0)
