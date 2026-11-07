@@ -1,11 +1,11 @@
-# Database schema and feature parity
+# Storage and database schema
 
 Snapshot: **2026-10-16**.
 
 This document describes the Qt/Linux library format, its robustness guarantees
 and its relationship to the macOS reference app. Update it whenever storage
-changes. See [architecture](ARCHITECTURE.md) for ownership and platform
-milestones.
+changes. Feature gaps and milestones are listed in
+[architecture](ARCHITECTURE.md#known-gaps-and-milestones).
 
 ## Scope decision: the Qt schema is its own design
 
@@ -70,7 +70,7 @@ unless overridden.
 
 | Store | Purpose |
 | --- | --- |
-| `library.sqlite` | Books, listening progress, per-book CC / Stop After Chapter preferences and known file locations. |
+| `library.sqlite` | Books, listening progress, notes, ratings, per-book CC / Stop After Chapter preferences and known file locations. |
 | `settings.ini` | Global appearance and desktop window preferences through Qt `QSettings`. |
 | `covers/` | Replaceable extracted artwork cache; artwork paths are not stored in the database. |
 
@@ -209,75 +209,3 @@ example a local copy and a NAS copy) does not appear twice in the menu.
 `lastAvailablePath()` walks every known location of the most recently opened
 books and returns the first one that still exists, so a deleted copy falls back
 to another path of the same book.
-
-## Implemented Qt features
-
-- Local file opening through the command line, file chooser and recent locations;
-  filesystem-mounted NAS paths use the same playback path.
-- Paused listening-position resume, play/pause, Stop, ten-second skips and
-  pitch-preserving playback speed changes.
-- Chapter selection and chapter-scoped scrubbing. Previous/Next pause and remember
-  chapter positions within the current session.
-- Embedded artwork, Fill/Fit cover mode and vertical cover dragging in Fill mode.
-- Embedded `mov_text` captions, cue timing, automatic overflow scrolling and
-  persistent caption text size.
-- Saved per-book CC and Stop After Chapter choices, plus a working chapter-end
-  pause with the cutoff limitation below.
-- File/Playback/View/Help menus, shortcuts and responsive narrow/wide controls,
-  including the centered elapsed-time readout.
-- Saved normal window size and maximized state, verified on KDE Wayland.
-- Per-book plain-text notes with explicit Save/Cancel. The editor captures the
-  logical book fingerprint and retains its draft if saving fails.
-- Per-book half-star ratings, persisted separately from notes and progress;
-  the transport star opens the shared rating/notes popup.
-- Session-local speech-tone EQ: −12 to +12 dB first-order tilt, a logarithmic
-  200–4,000 Hz pivot, response graph, bypass/reset and automatic headroom. An
-  additional 0–24 dB Boost knob uses oversampled lookahead peak limiting after
-  pitch-preserving speed processing. High boost reduces dynamics instead of
-  hard-clipping peaks.
-- One-shot Auto loudness targeting −18 LKFS for the current chapter, enabled
-  only when the chapter exceeds one minute; cancellable background analysis,
-  fixed upward gain, and no change to the source audiobook or main volume.
-- Gaussian artwork blur behind the transport panel in Fill mode, aligned with
-  cover framing and supported by both software and accelerated renderers.
-
-## Missing or incomplete Qt features
-
-| Feature | Current gap |
-| --- | --- |
-| EQ adjustment smoothing | Qt coalesces changes into libmpv filter replacements; macOS smooths coefficients per sample over 10 ms. Audible transition quality still needs manual validation. |
-| Precise Stop After Chapter | Qt observes the audio clock, pauses and seeks back to the boundary. Brief next-chapter audio is possible. The macOS engine enforces a playback endpoint before the notification. |
-| Independent player windows | Qt has one window/session. Opening another book replaces it; macOS supports independent windows and focused-player coordination. |
-| Drag-and-drop opening | No audiobook drop target or drag overlay in Qt. |
-| Desktop open routing | A basic desktop entry accepts a file argument, but forwarding opens to an existing process/window is not implemented. |
-| More global preferences | No configurable playback-rate list, default Stop After Chapter, auto-resume preference, general player font size or custom foreground/background colors. |
-| Caption index cache | Caption indexes are not cached; indexing a large book can delay CC availability. |
-| Database recovery | Only the automatic pre-migration backup exists; there is no restore UI or downgrade path. |
-| macOS interoperability | Explicitly out of scope, by the scope decision above. |
-
-### Additional platform and validation work
-
-These are port milestones, not missing macOS user features:
-
-- Linux MPRIS/media-key/desktop playback integration is not implemented.
-- Android builds, packaging, document access, background playback service,
-  audio focus and headset/lock-screen integration are not implemented. CMake
-  currently rejects Android builds explicitly.
-- Disconnected/stalled NAS handling and broader codec/edit-list/language coverage
-  still need hardening and validation.
-- Full keyboard/screen-reader coverage and audible seek, pitch and chapter-cutoff
-  behavior still need validation. Silent-engine tests do not establish audio quality.
-- Linux x86_64 Flatpak bundles are built and verified, with v0.1.0 published
-  through GitHub releases. The KDE 6.10 runtime supplies Qt and FFmpeg; the
-  manifest builds mpv and its helper libraries. AppStream screenshots and
-  aarch64 build verification remain open; see [releasing](RELEASING.md).
-
-## Follow-up decisions
-
-The storage shape is settled: Qt-native, `STRICT`, fingerprint-keyed, with
-rating and notes columns. Open items are behavioural, not schema-level:
-
-- Rating writes enforce half-star steps within `0–50` tenths of a star (`0`
-  unrated). Notes bind saves to the fingerprint captured by the editor.
-- If a global "default Stop After Chapter" or "default CC" preference is added,
-  the existing `NULL` versus `0` distinction already supports inheriting it.

@@ -38,19 +38,15 @@ or newer, including libavfilter >= 9 for chapter loudness measurement. These are
 build minimums; only the baseline above has been validated.
 No code or headers are downloaded during configuration.
 
-The bundled Phosphor icon assets use `@phosphor-icons/core` 2.1.1, pinned to
-commit `2b75f3ad12b420c9504ef05df8d2564a28f8500e`. They are MIT licensed;
-[the asset manifest](../assets/icons/manifest.json) records exact source URLs
-and SHA-256 checksums. Qt's SVG plugin renders them; it is already installed on
-this host and is included in the package inventory. A `QQuickImageProvider`
-rasterizes the SVGs at the requested pixel size and uses `QPainter` to tint
-their alpha masks from the active palette. The resulting ordinary QML images
-work with both software and GPU rendering, without a Qt Quick Effects dependency.
+The bundled Phosphor icons are vendored at `@phosphor-icons/core` 2.1.1; their
+pinned commit, checksums and rendering are described in
+[transport icons](../assets/icons/README.md). They need Qt's SVG image plugin,
+which is included in the package inventory.
 
-Release builds are distributed as self-hosted Flatpak bundles built against the
-`org.kde.Platform` runtime, which supplies Qt and KDE Frameworks; mpv, libass and
-libplacebo are built in the manifest. See [releasing](RELEASING.md). The apt
-versions below remain the native development baseline.
+Flatpak release bundles do not use these apt versions: the `org.kde.Platform`
+runtime supplies Qt and KDE Frameworks, and mpv, libass and libplacebo are built
+in the manifest. See [releasing](RELEASING.md). The versions above are the native
+development baseline.
 
 ## Capture an environment
 

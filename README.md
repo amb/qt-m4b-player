@@ -175,14 +175,9 @@ palette, including with Qt's software renderer.
 - **Validation:** automated playback tests use silent output. Audible quality,
   full accessibility and real-device Android behavior still need validation.
 
-Other planned work includes:
-
-- Additional appearance preferences, global defaults and configurable playback rates.
-- Independent windows, drag/drop and Linux MPRIS integration.
-- Library restore/recovery and Android packaging/media services.
-
-See [schema and feature parity](docs/SCHEMA_AND_FEATURE_PARITY.md) for the full
-comparison and remaining gaps.
+Planned work, including independent windows, drag-and-drop, MPRIS, more global
+preferences and Android, is listed in
+[known gaps and milestones](docs/ARCHITECTURE.md#known-gaps-and-milestones).
 
 ## Build from source
 
@@ -292,27 +287,18 @@ development and use mounted network paths to validate share loading and seeking.
 
 ### Data and settings
 
-The default Qt application data directory is normally
+The library database, settings and artwork cache live in
 `~/.local/share/qt-m4b-player/qt-m4b-player/`. Override it with `--data-dir`.
-
-| File / directory | Contents |
-| --- | --- |
-| `library.sqlite` | Books, locations, listening progress, notes, ratings and per-book preferences |
-| `settings.ini` | Window size/state and global appearance preferences |
-| `covers/` | Replaceable artwork cache |
-
 Debug, release and installed builds share data when using the same directory.
-Window sizes are bounded by the screen and the UI's minimum size.
-
 Schema upgrades first write a timestamped backup beside the database.
-Unrecognized database files are rejected without modification. The macOS
-database is never opened or migrated; only its `quick:v1` book fingerprint
-algorithm is shared. See [storage and schema](docs/SCHEMA_AND_FEATURE_PARITY.md).
+
+See [storage](docs/STORAGE.md) for each file's contents, the schema and its
+migrations.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md): state ownership, playback rules and startup constraints.
-- [Schema and feature parity](docs/SCHEMA_AND_FEATURE_PARITY.md): storage, behavior comparison and planned work.
+- [Architecture](docs/ARCHITECTURE.md): state ownership, playback rules, startup constraints, known gaps and milestones.
+- [Storage](docs/STORAGE.md): data files, database schema, migrations and book identity.
 - [Dependencies](docs/DEPENDENCIES.md): native and Flatpak dependency baselines.
 - [Releasing](docs/RELEASING.md): build, test and publish Flatpak bundles.
 - [Application icon](packaging/icons/README.md): macOS artwork source and transparent Linux exports.

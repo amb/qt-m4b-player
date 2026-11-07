@@ -1,4 +1,4 @@
-# Architecture and port milestones
+# Architecture and milestones
 
 ## Owners
 
@@ -13,6 +13,8 @@
 | QML | Responsive presentation, chapter/recent lists, controls, chapter-anchored scrubbing and caption overflow measurement. |
 | `FrostedPanel` | Cached CPU Gaussian blur of the cover under the transport panel; crop/framing coordinates match the visible artwork. |
 
+## Threading and I/O
+
 All session and library access occurs on the Qt owner thread. libmpv events are
 drained without blocking every 20 ms; there is no native callback holding a Qt
 object across its destruction. Metadata jobs receive a shared cancellation flag;
@@ -23,12 +25,13 @@ replace a newer book's captions, artwork or identity.
 Load, seek and playback property changes use libmpv's asynchronous APIs so NAS
 I/O does not run inside a synchronous UI command. Replies are tracked by request
 and load generation. The filesystem-mounted NAS needs no custom downloader;
-ordinary local paths go through the same engine and reader. Future work includes
-stalled/disconnected share handling and indexed-caption caching.
+ordinary local paths go through the same engine and reader.
 mpv's forward and backward packet caches are each limited to 8 MiB, keeping its
 automatic network caching from prefetching hours of audiobook audio into RAM.
 These limits cover packet caching; metadata, decoded audio and artwork use
 additional memory. Seeks outside the cached range read from the source file.
+
+## Book loading, artwork and captions
 
 Book opening starts libmpv paused and separately reads the lightweight metadata
 and sampled identity. Saved progress is restored only after both results are
@@ -42,6 +45,8 @@ Chapter text exposed by FFmpeg as chapter metadata/data is not treated as CC.
 The first preferred-language `mov_text` track is selected, with a first-track
 fallback. Parsing preserves sample PTS/duration, UTF-8/UTF-16 text and cue gaps.
 Broader multi-language and edit-list compatibility needs real-book validation.
+
+## Notes, ratings and popups
 
 The notes editor captures a fingerprint, title and text when opened. Its explicit
 Save updates only that book's `notes` field, even if playback has switched books.
@@ -61,6 +66,8 @@ the same way, consumes the outside click, and restores trigger focus unless a
 separate Notes/EQ window is active. Transport shortcuts are suppressed for every
 utility popup, so list/slider keyboard actions cannot seek or pause the book.
 
+## EQ, Boost and loudness
+
 EQ settings belong to the playback session and survive book replacement. The
 reference first-order tilt coefficients are applied through libmpv's lavfi
 wrapper with an explicit 48 kHz resample and double-precision `biquad` section.
@@ -76,6 +83,7 @@ dynamics; already distorted source audio cannot be repaired. Boost zero retains
 the existing tone-only pipeline; neutral tone with zero Boost and bypass remove
 all EQ filters. Reset clears Boost and tone, restores 1,000 Hz, and retains bypass.
 Volume stays independent and limited to 100 percent.
+
 `LoudnessReader` decodes only the current chapter on a cancellable worker, trims
 decoded frames to its exact boundaries, applies the current tone/headroom at
 48 kHz, and measures gated BS.1770/EBU R128 integrated loudness through libavfilter.
@@ -90,6 +98,8 @@ a one-shot correction, not continuous loudness riding or a change to the source 
 Changes are coalesced over 60 ms before replacing the graph, rather than using
 the reference's per-sample 10 ms smoothing. Filter command errors disable EQ and
 are shown to the user. Audible adjustment quality needs manual validation.
+
+## Frosted transport panel
 
 The frosted transport panel samples the same cover image and framing rectangle
 as `CoverArtwork`, pads the crop, downsamples to a bounded image, and performs a
@@ -114,17 +124,13 @@ no shader/effects package. Fit mode uses an opaque palette background.
 - Progress writes do not overwrite notes, ratings or playback preference fields.
   Untouched preference fields remain NULL, representing an unset choice.
 - Save progress at significant transport actions, replacement, shutdown and
-  every 30 seconds of advancing playback.
+  every 30 seconds of advancing playback. Seeks are coalesced and saved once,
+  one second after the last; a newly opened book is recorded immediately.
 - Keep the reference UI's narrow/wide responsive layouts and its full menu bar
   when adding or rearranging controls.
 
-Schema v2 is initialized transactionally and stamped with `PRAGMA user_version`
-and an `application_id` that identifies our files. A newer schema is rejected,
-and so is an unrelated SQLite file. Version 1 databases are upgraded in place
-after a timestamped backup. This project's schema is deliberately distinct from
-the macOS schema and is not intended to interoperate with it; see
-[database schema and feature parity](SCHEMA_AND_FEATURE_PARITY.md) for the schema
-details, the robustness guarantees and the implemented/missing features.
+The database schema, migrations and storage locations are described in
+[storage](STORAGE.md).
 
 ## Startup and initialization constraints
 
@@ -147,19 +153,39 @@ otherwise plausible alternative, so they are easy to reintroduce by accident.
 - Help and About use the explicitly sized `InfoPopup.qml`. A Qt `Dialog`
   produced a sizing loop.
 
-## Milestones
+## Known gaps and milestones
+
+This is the single list of planned work. The README summarizes the user-visible
+limitations; Flatpak packaging items are tracked in [releasing](RELEASING.md).
+
+Gaps relative to the macOS reference app:
+
+| Feature | Current gap |
+| --- | --- |
+| EQ adjustment smoothing | Qt coalesces changes into libmpv filter replacements; macOS smooths coefficients per sample over 10 ms. Audible transition quality still needs manual validation. |
+| Precise Stop After Chapter | Qt observes the audio clock, pauses and seeks back to the boundary. Brief next-chapter audio is possible. The macOS engine enforces a playback endpoint before the notification. |
+| Independent player windows | Qt has one window/session. Opening another book replaces it; macOS supports independent windows and focused-player coordination. |
+| Drag-and-drop opening | No audiobook drop target or drag overlay in Qt. |
+| Desktop open routing | A basic desktop entry accepts a file argument, but forwarding opens to an existing process/window is not implemented. |
+| More global preferences | No configurable playback-rate list, default Stop After Chapter, auto-resume preference, general player font size or custom foreground/background colors. |
+| Caption index cache | Caption indexes are not cached; indexing a large book can delay CC availability. |
+| Database recovery | Only the automatic pre-migration backup exists; there is no restore UI or downgrade path. |
+| macOS interoperability | Explicitly out of scope; see the [storage scope decision](STORAGE.md#scope-decision-the-qt-schema-is-its-own-design). |
+
+Port milestones:
 
 1. **Implemented Linux prototype:** apt/CMake build, single session, libmpv,
    native FFmpeg extraction, reference fixtures, caption scrolling and saved resume.
 2. **Playback hardening:** native chapter audio cutoff, late-load/seek/EOF race
-   validation, large-book startup/indexing, codec/chapter/edit-list compatibility
-   and audible pitch/seek/cutoff tests.
+   validation, stalled/disconnected NAS shares, large-book startup/indexing,
+   codec/chapter/edit-list/language compatibility and audible pitch/seek/cutoff
+   tests. Silent-engine tests do not establish audio quality.
 3. **Product parity on Linux:** settings/defaults,
    multi-window sessions, saved cover framing and drop/open routing;
    manual keyboard/screen-reader validation.
 4. **Linux integration/distribution:** self-hosted Flatpak release bundles
-   (KDE runtime, mpv built in the manifest), KDE colour-scheme theming and
-   focused-session MPRIS.
+   (KDE runtime, mpv built in the manifest) and KDE colour-scheme theming are
+   done; focused-session MPRIS and media keys remain.
 5. **Android:** Qt Android toolchain, pinned NDK/SDK/Qt builds, Android builds of
    libmpv/FFmpeg, managed file import or durable document access, and a native
    foreground playback service/media session. Add audio focus, output-route
@@ -178,12 +204,8 @@ Keep apt and CMake as the initial dependency workflow. CMake records exact
 configured library versions in the build directory. The version report records
 distro revisions and discovered dynamic-library packages. Adopt a separate
 package manager only when cross-platform packaging needs justify it. See
-[dependency policy](DEPENDENCIES.md).
-
-Release artifacts are self-hosted Flatpak bundles built from
-`packaging/flatpak/` against `org.kde.Platform`; see [releasing](RELEASING.md).
-The app declares no theme: it selects the KDE Quick Controls style when present
-and derives all colours from the platform palette.
+[dependency policy](DEPENDENCIES.md). Release bundles, their runtime and
+theming are covered in [releasing](RELEASING.md).
 
 All privileged commands (package installation and other system changes) are run
 by the developer. Nothing in this repository should invoke `sudo`.
