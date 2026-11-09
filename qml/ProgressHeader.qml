@@ -7,6 +7,9 @@ Item {
     property string positionText: ""
     property string remainingText: ""
     property color textColor: "white"
+    // Player text size; time readouts are slightly smaller than the title.
+    property int textSize: 16
+    readonly property int detailSize: Math.round(textSize * 0.875)
     readonly property real spacing: 8
     // Measure full labels before falling back, matching the reference layout.
     readonly property bool wide: width >= position.implicitWidth
@@ -22,7 +25,7 @@ Item {
         width: header.wide ? header.sideWidth : header.width
         y: header.wide ? (header.height - height) / 2 : 0
         color: header.textColor
-        font.pixelSize: 16
+        font.pixelSize: header.textSize
         font.bold: true
         elide: Text.ElideRight
     }
@@ -36,7 +39,7 @@ Item {
         y: header.wide ? (header.height - height) / 2 : chapter.height + 4
         color: header.textColor
         opacity: 0.75
-        font.pixelSize: 14
+        font.pixelSize: header.detailSize
     }
     Label {
         id: remaining
@@ -47,7 +50,7 @@ Item {
         y: header.wide ? (header.height - height) / 2 : chapter.height + 4
         color: header.textColor
         opacity: 0.75
-        font.pixelSize: 14
+        font.pixelSize: header.detailSize
         horizontalAlignment: Text.AlignRight
         elide: Text.ElideRight
     }

@@ -190,12 +190,17 @@ macOS uses SwiftUI `@AppStorage` backed by `UserDefaults`. Qt uses
 
 | Qt key | Current behavior |
 | --- | --- |
-| `appearance/captionSize` | Caption size in pixels, `18–42`, default `26`; saved when changed. |
-| `appearance/fillCover` | Fill versus Fit cover mode, default Fill; saved when changed. |
+| `playback/resumeAtLaunch` | Open the most recent available book, paused, when launched without a file; default `true`. `--no-resume` overrides it for one launch. |
+| `playback/stopAfterChapterDefault` | Stop After Chapter for books whose `stop_after_chapter` is `NULL`; default `false`. Never written into book rows. |
+| `appearance/fillCover` | Fill versus Fit cover mode, default Fill. |
+| `appearance/playerTextSize` | Player text size in pixels, `12–24`, default `16`; progress readouts, empty-state text and notes. |
+| `appearance/captionSize` | Caption size in pixels, `12–108`, default `26`. |
+| `appearance/captionTransparency` | Caption panel transparency in percent, `0–100`, default `0` (opaque). |
 | `window/width`, `window/height` | Normal window size; saved on orderly exit and bounded by the current screen/UI minimum when restored. |
 | `window/maximized` | Maximized-state persistence; minimized/fullscreen states do not become launch modes. |
 
-Caption size and Fill/Fit are changed in View → Appearance.
+These are edited in File → Settings and saved as soon as they change; out-of-range
+values are clamped when read.
 CC enabled and Stop After Chapter remain per-book SQLite preferences.
 Window placement belongs to the desktop/window manager. Cover drag position,
 playback speed and volume are not persisted across app launches.

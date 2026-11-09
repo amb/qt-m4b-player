@@ -73,7 +73,8 @@ flatpak override --user --filesystem=/mnt/nas io.github.amb.QtM4bPlayer
 ### Open a book and control playback
 
 Use **File → Open Audiobook**, **File → Open Recent**, or Ctrl+O. Without a file
-argument, the player opens the last available recent location paused.
+argument, the player opens the last available recent location paused, unless
+that is turned off in Settings.
 
 File → Open Audiobook uses the desktop's native file selector when Qt's platform
 integration provides one, including KDE's selector on Plasma. Otherwise, Qt
@@ -81,24 +82,33 @@ shows its built-in file dialog.
 
 The menu bar and lower transport controls provide the playback actions. Each
 command appears in one menu: **File** for the book and its files (Open, Recent,
-Info, Notes, WAV export, Quit), **Playback** for transport, chapters, speed,
-Stop After Chapter, volume and EQ, **View** for captions, full screen and
-Appearance, and **Help**.
+Info, Notes, WAV export, Settings, Quit), **Playback** for transport, chapters,
+speed, Stop After Chapter, volume and EQ, **View** for captions and full screen,
+and **Help**.
 **Help → Player Help** lists the shortcuts.
 
 | Shortcut | Action |
 | --- | --- |
-| Ctrl+O | Open an audiobook |
 | Space | Play / pause |
+| Escape | Stop and return to the chapter start |
+| Up / Down | Previous / next chapter (pauses; stays put at the first/last chapter) |
 | Left / Right | Skip back / forward ten seconds |
-| Ctrl+Left / Ctrl+Right | Previous / next chapter |
-| Ctrl+S | Stop and return to the chapter start |
-| Ctrl+J | Open the chapter list |
+| Ctrl+Left / Ctrl+Right | Playback speed − / + 0.1× (0.5–3×) |
+| Ctrl+Up / Ctrl+Down | Volume + / − 5% |
+| Ctrl+O | Open an audiobook |
 | Ctrl+I | Open Audiobook Info |
-| Ctrl+Shift+C | Toggle captions once indexed |
-| Ctrl+N | Open Notes |
+| Ctrl+N | Open Notes (Ctrl+S saves) |
 | Ctrl+E | Open EQ |
-| Ctrl+, | Open Appearance |
+| Ctrl+J | Open the chapter list |
+| Ctrl+Shift+C | Toggle captions once indexed |
+| Ctrl+, | Open Settings |
+| Ctrl+W | Close the window (Info, Settings and EQ close themselves) |
+| Ctrl+Q | Quit |
+| Ctrl+Shift+H or F1 | Player Help |
+| F11 | Full screen |
+
+These follow the macOS app with Ctrl in place of Cmd. Bare keys do not reach
+playback while a popup, Notes or Info has the keyboard; Escape then closes the popup.
 
 Chapters, rating/notes, playback speed and volume open above their buttons with
 matching dimming and active-button highlights.
@@ -196,8 +206,12 @@ last export folder of the session, otherwise in Music.
   book and is not saved across launches. Dragging does not toggle playback.
 - **Layout:** controls use one row in wide windows and two in narrow windows.
   Chapter and time information sits above the seek bar, wrapping when needed.
-- **Preferences:** caption text size and Fill cover background are set in
-  **View → Appearance** (Ctrl+,) and save immediately.
+- **Settings:** **File → Settings…** (Ctrl+,) is the one place for global
+  preferences: resuming the last book at launch, the Stop After Chapter default
+  for books without their own choice, Fit/Fill cover display, player text size
+  (12–24 px, also used by notes), subtitle text size (12–108 px) and subtitle
+  background transparency (0% solid to 100% none; text keeps a black outline).
+  A preview shows the player text size. Changes apply and save immediately.
 - **Window:** normal size and maximized state are saved between launches.
   The desktop controls window placement, including on KDE Wayland.
 
@@ -299,7 +313,7 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
 
 | Option | Purpose |
 | --- | --- |
-| `--no-resume` | Start with an empty player |
+| `--no-resume` | Start with an empty player, regardless of the resume setting |
 | `--data-dir DIRECTORY` | Isolate the database, cache and settings |
 | `--dependency-versions` | Print runtime Qt, mpv engine and SQLite versions |
 | `--smoke-test` | Load the UI with silent audio, then exit after one second |

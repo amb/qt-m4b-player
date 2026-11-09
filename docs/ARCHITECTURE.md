@@ -13,7 +13,7 @@
 | `DesktopIntegration` | Clipboard and `org.freedesktop.FileManager1` file reveal, falling back to opening the folder. |
 | `Library` | Qt SQL / SQLite connection, prepared field-specific writes, atomic book/location progress commits and schema version. |
 | `WindowPreferences` | Restore desktop window size/maximized state before showing it; save normal size separately from fullscreen/maximized dimensions in QSettings. |
-| `AppPreferences` | Global caption text size and cover fill mode, exposed to QML and saved on change in the same QSettings file as window preferences. |
+| `AppPreferences` | Global Settings-window preferences (launch resume, Stop After Chapter default, cover mode, player/caption text sizes, caption transparency), exposed to QML and saved on change in the same QSettings file as window preferences. |
 | QML | Responsive presentation, chapter/recent lists, controls, chapter-anchored scrubbing and caption overflow measurement. |
 | `FrostedPanel` | Cached CPU Gaussian blur of the cover under the transport panel; crop/framing coordinates match the visible artwork. |
 
@@ -157,7 +157,7 @@ no shader/effects package. Fit mode uses an opaque palette background.
 - Keep the reference UI's narrow/wide responsive layouts and its full menu bar
   when adding or rearranging controls. Each command belongs to one menu: File
   (book and files), Playback (transport, chapters, speed, sound), View (display),
-  Help. Appearance settings live only in the Appearance dialog.
+  Help. Global preferences live only in File → Settings.
 
 The database schema, migrations and storage locations are described in
 [storage](STORAGE.md).
@@ -197,7 +197,7 @@ Gaps relative to the macOS reference app:
 | Independent player windows | Qt has one window/session. Opening another book replaces it; macOS supports independent windows and focused-player coordination. |
 | Drag-and-drop opening | No audiobook drop target or drag overlay in Qt. |
 | Desktop open routing | A basic desktop entry accepts a file argument, but forwarding opens to an existing process/window is not implemented. |
-| More global preferences | No configurable playback-rate list, default Stop After Chapter, auto-resume preference, general player font size or custom foreground/background colors. |
+| More global preferences | No configurable playback-rate list or custom foreground/background colors. |
 | Caption index cache | Caption indexes are not cached; indexing a large book can delay CC availability. |
 | Database recovery | Only the automatic pre-migration backup exists; there is no restore UI or downgrade path. |
 | macOS interoperability | Explicitly out of scope; see the [storage scope decision](STORAGE.md#scope-decision-the-qt-schema-is-its-own-design). |

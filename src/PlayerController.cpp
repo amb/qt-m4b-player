@@ -217,7 +217,7 @@ void PlayerController::openBook(const QUrl &url)
             if (!m_captionsTouched)
                 m_captions = state.captions.value_or(false);
             if (!m_stopTouched)
-                m_stopAfter = state.stopAfterChapter.value_or(false);
+                m_stopAfter = state.stopAfterChapter.value_or(m_stopAfterDefault);
             m_metadataReady = true;
             applyResume();
             if (m_loaded && (m_captionsTouched || m_stopTouched))
@@ -349,8 +349,16 @@ void PlayerController::navigateChapter(int offset)
 {
     const int source = m_currentChapter;
     const int target = source + offset;
-    if (source < 0 || target < 0 || target >= m_chapters.size())
+    if (source < 0)
         return;
+    if (target < 0 || target >= m_chapters.size()) {
+        // At the first/last chapter, navigation pauses and stays in place.
+        m_engine.setPaused(true);
+        m_playing = false;
+        save();
+        emit stateChanged();
+        return;
+    }
     m_chapterPositions[source] = std::clamp(m_position, m_chapters[source].start,
                                           std::nextafter(m_chapters[source].end, m_chapters[source].start));
     m_engine.setPaused(true);

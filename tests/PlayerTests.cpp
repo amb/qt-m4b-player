@@ -222,6 +222,28 @@ private slots:
         QCOMPARE(player.captionStream(), -1);
         QVERIFY(!player.chunkExportAvailable());
     }
+    void stopAfterChapterDefaultOnlySeedsUnsetBooks()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        player.setStopAfterChapterDefault(true);
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.notesAvailable(), 10000);
+        QVERIFY(player.stopAfterChapter());
+        // Changing the default leaves the open book alone.
+        player.setStopAfterChapterDefault(false);
+        QVERIFY(player.stopAfterChapter());
+        // An explicit per-book Off wins over an On default.
+        player.setStopAfterChapter(false);
+        player.setStopAfterChapterDefault(true);
+        player.openBook(fixture("no-captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.notesAvailable(), 10000);
+        QVERIFY(player.stopAfterChapter());
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.notesAvailable(), 10000);
+        QVERIFY(!player.stopAfterChapter());
+    }
     void realPausedSeekingAndTransport()
     {
         QTemporaryDir directory;

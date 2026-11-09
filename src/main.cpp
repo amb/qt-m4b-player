@@ -84,6 +84,9 @@ int main(int argc, char *argv[])
             return 0;
         }
         AppPreferences preferences(data + "/settings.ini");
+        player.setStopAfterChapterDefault(preferences.stopAfterChapterDefault());
+        QObject::connect(&preferences, &AppPreferences::stopAfterChapterDefaultChanged, &player,
+                         [&player, &preferences] { player.setStopAfterChapterDefault(preferences.stopAfterChapterDefault()); });
         QQmlApplicationEngine engine;
         engine.addImageProvider("transport", new TransportIconProvider);
         engine.setInitialProperties({{"player", QVariant::fromValue(&player)},
@@ -106,7 +109,7 @@ int main(int argc, char *argv[])
         const auto books = parser.positionalArguments();
         if (!books.isEmpty())
             player.openBook(QUrl::fromLocalFile(QFileInfo(books.first()).absoluteFilePath()));
-        else if (!parser.isSet("no-resume"))
+        else if (!parser.isSet("no-resume") && preferences.resumeAtLaunch())
             player.restoreLastBook();
         if (parser.isSet("smoke-test")) {
             const QString screenshot = parser.value("screenshot");

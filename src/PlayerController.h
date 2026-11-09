@@ -125,6 +125,9 @@ public:
     Q_INVOKABLE void setVolume(double volume);
     Q_INVOKABLE void setCaptions(bool enabled);
     Q_INVOKABLE void setStopAfterChapter(bool enabled);
+    // Used when a book opens without its own saved Stop After Chapter choice.
+    // Changing it never alters the loaded book or rewrites saved choices.
+    void setStopAfterChapterDefault(bool enabled) { m_stopAfterDefault = enabled; }
     Q_INVOKABLE void clearError();
     void restoreLastBook();
     void shutdown();
@@ -180,6 +183,7 @@ private:
     bool m_loaded = false, m_playing = false, m_metadataReady = false;
     bool m_positionTouched = false, m_captionsTouched = false, m_stopTouched = false;
     bool m_captions = false, m_stopAfter = false, m_indexingCaptions = false;
+    bool m_stopAfterDefault = false;
     // Ignore old clock reports until a precise seek reaches its intended destination.
     std::optional<double> m_seekTarget;
     QElapsedTimer m_seekElapsed;

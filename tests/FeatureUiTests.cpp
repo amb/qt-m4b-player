@@ -7,6 +7,7 @@
 #include <QQuickWindow>
 #include <QTemporaryDir>
 #include <QDir>
+#include <QFont>
 #include <QtTest>
 #include <memory>
 
@@ -223,6 +224,130 @@ private slots:
         QTRY_VERIFY(!info->isVisible());
         QVERIFY(!notes->isVisible());
         QVERIFY(!root->property("transportBlocked").toBool());
+    }
+    void preferencesPersistAndClampRanges()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath("settings.ini");
+        {
+            AppPreferences preferences(path);
+            QVERIFY(preferences.resumeAtLaunch());
+            QVERIFY(!preferences.stopAfterChapterDefault());
+            QCOMPARE(preferences.playerTextSize(), 16);
+            QCOMPARE(preferences.captionSize(), 26);
+            QCOMPARE(preferences.captionTransparency(), 0);
+            preferences.setResumeAtLaunch(false);
+            preferences.setStopAfterChapterDefault(true);
+            preferences.setFillCover(false);
+            preferences.setPlayerTextSize(99);
+            preferences.setCaptionSize(5);
+            preferences.setCaptionTransparency(140);
+        }
+        AppPreferences restored(path);
+        QVERIFY(!restored.resumeAtLaunch());
+        QVERIFY(restored.stopAfterChapterDefault());
+        QVERIFY(!restored.fillCover());
+        QCOMPARE(restored.playerTextSize(), 24);
+        QCOMPARE(restored.captionSize(), 12);
+        QCOMPARE(restored.captionTransparency(), 100);
+    }
+    void settingsWindowAppliesChangesImmediately()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        AppPreferences preferences(directory.filePath("settings.ini"));
+        QQmlEngine engine;
+        engine.addImageProvider("transport", new TransportIconProvider);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString(SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"player", QVariant::fromValue(&player)}, {"preferences", QVariant::fromValue(&preferences)}}));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        window->show(); window->requestActivate();
+        QTest::qWait(100);
+        auto *settings = root->findChild<QQuickWindow *>("settingsWindow");
+        QVERIFY(settings);
+        QTest::keyClick(window, Qt::Key_Comma, Qt::ControlModifier);
+        QTRY_VERIFY(settings->isVisible());
+        auto *resume = settings->findChild<QObject *>("resumeAtLaunch");
+        QVERIFY(resume && resume->property("checked").toBool());
+        QTRY_VERIFY(resume->property("activeFocus").toBool());
+        QTest::keyClick(settings, Qt::Key_Space);
+        QTRY_VERIFY(!preferences.resumeAtLaunch());
+        // Changes made elsewhere are reflected without reopening the window.
+        preferences.setCaptionTransparency(35);
+        preferences.setPlayerTextSize(20);
+        auto *slider = settings->findChild<QObject *>("captionTransparency");
+        QVERIFY(slider);
+        QCOMPARE(slider->property("value").toDouble(), 35.0);
+        auto *header = root->findChild<QObject *>("chapterReadout");
+        QVERIFY(header);
+        QCOMPARE(header->property("font").value<QFont>().pixelSize(), 20);
+        const QString snapshots = qEnvironmentVariable("QT_M4B_UI_SNAPSHOTS");
+        if (!snapshots.isEmpty()) {
+            QTest::qWait(100);
+            QVERIFY(QDir().mkpath(snapshots));
+            QVERIFY(settings->grabWindow().save(snapshots + "/settingsWindow.png"));
+        }
+        QTest::keyClick(settings, Qt::Key_Escape);
+        QTRY_VERIFY(!settings->isVisible());
+        QVERIFY(!preferences.resumeAtLaunch());
+    }
+    void macStyleShortcutsDriveTransport()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        AppPreferences preferences(directory.filePath("settings.ini"));
+        player.openLocalPath(QString(SOURCE_DIR) + "/tests/fixtures/captions.m4b");
+        QTRY_VERIFY(player.notesAvailable() && player.chapters().size() == 2);
+        QQmlEngine engine;
+        engine.addImageProvider("transport", new TransportIconProvider);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString(SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"player", QVariant::fromValue(&player)}, {"preferences", QVariant::fromValue(&preferences)}}));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        window->show(); window->requestActivate();
+        QTest::qWait(100);
+        QCOMPARE(player.currentChapter(), 0);
+        QTest::keyClick(window, Qt::Key_Down);
+        QTRY_COMPARE(player.currentChapter(), 1);
+        QTest::keyClick(window, Qt::Key_Down); // last chapter: stays put
+        QCOMPARE(player.currentChapter(), 1);
+        QTest::keyClick(window, Qt::Key_Right);
+        QTRY_VERIFY(std::abs(player.position() - 4.0) > 0.5 || player.position() >= 5.9);
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTRY_VERIFY(std::abs(player.position() - 3.0) < 0.05);
+        QVERIFY(!player.playing());
+        QTest::keyClick(window, Qt::Key_Up);
+        QTRY_COMPARE(player.currentChapter(), 0);
+        QTest::keyClick(window, Qt::Key_Space);
+        QTRY_VERIFY(player.playing());
+        QTest::keyClick(window, Qt::Key_Up); // first chapter: pauses in place
+        QTRY_VERIFY(!player.playing());
+        QCOMPARE(player.currentChapter(), 0);
+        QTest::keyClick(window, Qt::Key_Right, Qt::ControlModifier);
+        QTRY_COMPARE(player.speed(), 1.1);
+        QTest::keyClick(window, Qt::Key_Left, Qt::ControlModifier);
+        QTest::keyClick(window, Qt::Key_Left, Qt::ControlModifier);
+        QTRY_COMPARE(player.speed(), 0.9);
+        QTest::keyClick(window, Qt::Key_Down, Qt::ControlModifier);
+        QTRY_COMPARE(player.volume(), 95.0);
+        // Keyboard navigation inside an open menu must not reach playback.
+        auto *fileMenu = root->findChild<QObject *>("fileMenu");
+        QVERIFY(fileMenu);
+        QVERIFY(QMetaObject::invokeMethod(fileMenu, "open"));
+        QTRY_VERIFY(fileMenu->property("opened").toBool());
+        QTest::keyClick(window, Qt::Key_Down);
+        QTest::keyClick(window, Qt::Key_Down);
+        QTest::keyClick(window, Qt::Key_Escape);
+        QTRY_VERIFY(!fileMenu->property("visible").toBool());
+        QCOMPARE(player.currentChapter(), 0);
+        QVERIFY(!player.playing());
     }
     void notesKeyboardCancelSaveAndFailureKeepDraft()
     {

@@ -46,6 +46,7 @@ ApplicationWindow {
     }
 
     Shortcut { sequences: ["Escape", "Return", "Enter"]; enabled: info.visible; context: Qt.WindowShortcut; onActivated: info.close() }
+    Shortcut { sequences: [StandardKey.Close]; enabled: info.visible; context: Qt.WindowShortcut; onActivated: info.close() }
 
     component SectionHeading: Label {
         Layout.fillWidth: true

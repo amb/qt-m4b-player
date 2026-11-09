@@ -34,7 +34,7 @@ Legend:
 | --- | --- | --- | --- | --- |
 | 1 | Audiobook Info sheet (File → Info…, Ctrl+I) | W05, M02 | ✅ **Implemented** (see 2.16) | — |
 | 2 | WAV export: current chapter and current caption chunk | M02c–M02e, I02 | ✅ **Implemented** (see 2.21) | — |
-| 3 | Full Settings window: resume-at-launch, Stop After Chapter default, player text size, subtitle transparency, custom colors, preview, Reset Appearance | S01–S10 | Mostly missing | Partly ("More global preferences") |
+| 3 | Full Settings window: resume-at-launch, Stop After Chapter default, player text size, subtitle transparency, custom colors, preview, Reset Appearance | S01–S10 | ✅ **Implemented** except custom colors and Reset (not wanted) | — |
 | 4 | Multiple independent player windows | P01, I06, M06 | Missing | Yes |
 | 5 | Drag-and-drop opening with drop overlay | P20 | Missing | Yes |
 | 6 | System media controls / Now Playing (MPRIS on Linux) | K02 | Missing | Yes (milestone 4) |
@@ -111,7 +111,7 @@ Section 2 lists each spec area in detail.
 | Spec | Qt | Status |
 | --- | --- | --- |
 | Previous/Next **pause**, use remembered in-session position, one step per click | Implemented (`navigateChapter`) | OK |
-| Previous/Next **stay enabled** at first/last chapter and **pause without moving** | Actions **disabled** at edges (`Main.qml:95,102`), and `navigateChapter` returns without pausing | **Diverges NEW** |
+| Previous/Next **stay enabled** at first/last chapter and **pause without moving** | Same | ✅ |
 | Remembered position at or past chapter end → go to start | Clamped to `nextafter(end, start)`, so it can return to just before the end | Diverges (minor) NEW |
 | Back/Forward 10 s keep play intent, clamped | Implemented | OK |
 | Play at exact book end does nothing | **Seeks to 0 and plays** (`PlayerController.cpp` `togglePlayback`) | **Diverges NEW** |
@@ -119,8 +119,8 @@ Section 2 lists each spec area in detail.
 | Stop = chapter start + pause, falling back to book start | Implemented | OK |
 | Hover tooltips after ~1 s | `ToolTip.visible: hovered` with no delay set (Qt default) | Minor |
 | Sizes 40 pt / 46 pt central, 6 pt gap | 48 px / 56 px, 4 px gap | Cosmetic divergence |
-| **Bare keys:** Space play, **Esc stop**, **↑/↓ chapters**, ←/→ skip | Space, ←/→ match. **Stop = Ctrl+S**, **chapters = Ctrl+←/→**. Esc and ↑/↓ are unbound | **Diverges** (deliberate Linux remap? needs a decision) |
-| **Cmd+←/→ = speed ±0.1×** | Ctrl+←/→ is chapter navigation. No speed shortcut | **Missing NEW** |
+| **Bare keys:** Space play, **Esc stop**, **↑/↓ chapters**, ←/→ skip | Same | ✅ |
+| **Cmd+←/→ = speed ±0.1×** | Ctrl+←/→, clamped to the 0.5–3× presets | ✅ |
 | Cmd+↑/↓ = volume ±5 | Ctrl+↑/↓ | OK |
 | Bare keys are suppressed while popovers or editors own focus | `enabled: !notesEditor.visible && !utilityPopupOpen` | OK |
 
@@ -279,16 +279,16 @@ caption size slider. Compared with the spec's Settings:
 
 | ID | Setting | Spec default / range | Qt |
 | --- | --- | --- | --- |
-| S01 | Resume most recent book at launch (loads paused) | On | **Missing.** Always resumes; only the `--no-resume` CLI flag disables it |
-| S02 | Stop After Chapter default for books without saved choice | Off | **Missing** (schema supports NULL) |
-| S03 | Cover display Fit / Fill + explanation | **Fit** | Present as a checkbox; **default Fill** |
-| S04 | Player text size | 12–24, step 1, default 16.5 | **Missing.** Fonts are hard-coded |
-| S05 | Subtitle text size | 12–108, step 1, default 18 | 18–42 px, default 26 |
-| S06 | Subtitle background transparency | 0–100%, step 1, default 0% | **Missing** |
-| S07 | Use default system colors | On | **Missing** |
-| S08 | Foreground / background color pickers (RGB, no alpha) | — | **Missing** (`QtQuick.Dialogs.ColorDialog` is available) |
-| S09 | Live appearance preview "Audiobook title · 12:34 remaining" | — | **Missing** |
-| S10 | Reset Appearance (appearance keys only, not playback/book prefs or notes size) | — | **Missing** |
+| S01 | Resume most recent book at launch (loads paused) | On | ✅ |
+| S02 | Stop After Chapter default for books without saved choice | Off | ✅ |
+| S03 | Cover display Fit / Fill + explanation | **Fit** | ✅ picker + explanation; default stays **Fill** |
+| S04 | Player text size | 12–24, step 1, default 16.5 | ✅ 12–24 px, default 16 (progress, empty state, notes) |
+| S05 | Subtitle text size | 12–108, step 1, default 18 | ✅ 12–108 px, default 26 |
+| S06 | Subtitle background transparency | 0–100%, step 1, default 0% | ✅ with black text outline |
+| S07 | Use default system colors | On | Not wanted |
+| S08 | Foreground / background color pickers (RGB, no alpha) | — | Not wanted |
+| S09 | Live appearance preview "Audiobook title · 12:34 remaining" | — | ✅ |
+| S10 | Reset Appearance (appearance keys only, not playback/book prefs or notes size) | — | Not wanted |
 
 The spec also requires that settings apply immediately and have no Save/Cancel.
 Qt does this for the settings it has.

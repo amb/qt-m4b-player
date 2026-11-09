@@ -16,6 +16,7 @@ ApplicationWindow {
     visible: false
     function openPanel(): void { show(); raise(); requestActivate() }
     Shortcut { sequence: "Escape"; enabled: equalizer.visible; context: Qt.WindowShortcut; onActivated: equalizer.close() }
+    Shortcut { sequences: [StandardKey.Close]; enabled: equalizer.visible; context: Qt.WindowShortcut; onActivated: equalizer.close() }
 
     ColumnLayout {
         anchors.fill: parent

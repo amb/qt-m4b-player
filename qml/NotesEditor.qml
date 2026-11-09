@@ -10,6 +10,9 @@ ApplicationWindow {
     property string bookFingerprint: ""
     property string bookTitle: ""
     property string saveError: ""
+    // Player text size from Settings, for the note text and actions.
+    property int textSize: 16
+    font.pixelSize: textSize
     readonly property alias draft: textArea.text
     objectName: "notesEditor"
     title: "Notes — " + bookTitle
@@ -47,7 +50,7 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.margins: 20
         spacing: 12
-        Label { text: "Notes"; font.pixelSize: 24 }
+        Label { text: "Notes"; font.pixelSize: Math.max(22, editor.textSize + 8) }
         Label { text: editor.bookTitle; Layout.fillWidth: true; elide: Text.ElideRight }
         ScrollView {
             Layout.fillWidth: true
@@ -60,6 +63,7 @@ ApplicationWindow {
                 objectName: "notesText"
                 palette: editor.palette
                 textFormat: TextEdit.PlainText
+                font.pixelSize: editor.textSize
                 wrapMode: TextEdit.Wrap
                 selectByMouse: true
                 background: Rectangle {

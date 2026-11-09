@@ -12,6 +12,13 @@ ApplicationWindow {
     property string buildTimestamp: ""
     readonly property bool wideControls: width >= 740
     readonly property var playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+    readonly property real minimumSpeed: playbackRates[0]
+    readonly property real maximumSpeed: playbackRates[playbackRates.length - 1]
+    // Ctrl+Left/Right step speed by 0.1×, kept to hundredths and the preset range.
+    function changeSpeed(delta: real): void {
+        const next = Math.round((window.player.speed + delta) * 100) / 100
+        window.player.setSpeed(Math.max(window.minimumSpeed, Math.min(window.maximumSpeed, next)))
+    }
     readonly property bool utilityPopupOpen: chapterSheet.visible || ratingPopup.visible || speedPopup.visible || volumePopup.visible
     // Separate windows and utility popups own the keyboard; transport keys must not reach playback.
     readonly property bool transportBlocked: notesEditor.visible || bookInfoWindow.visible || utilityPopupOpen
@@ -25,11 +32,18 @@ ApplicationWindow {
     // C++ restores the saved size/state before showing the window.
     visible: false
     title: window.player.loaded ? window.player.title + (window.player.author ? " — " + window.player.author : "") : "qt-m4b-player"
-    onClosing: { notesEditor.close(); bookInfoWindow.close(); equalizerWindow.close() }
+    onClosing: { notesEditor.close(); bookInfoWindow.close(); settingsWindow.close(); equalizerWindow.close() }
 
+    SettingsWindow {
+        id: settingsWindow
+        preferences: window.preferences
+        transientParent: window
+        palette: window.palette
+    }
     NotesEditor {
         id: notesEditor
         player: window.player
+        textSize: window.preferences.playerTextSize
         transientParent: window
         palette: window.palette
     }
@@ -123,22 +137,23 @@ ApplicationWindow {
     Action {
         id: stopAction
         text: "&Stop and Return to Chapter Start"
-        shortcut: "Ctrl+S"
+        shortcut: "Escape"
         enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.stop()
     }
     Action {
         id: previousAction
         text: "&Previous Chapter"
-        shortcut: "Ctrl+Left"
-        enabled: window.player.loaded && !window.transportBlocked && window.player.currentChapter > 0
+        shortcut: "Up"
+        // Stays enabled at the first chapter, where it pauses without moving.
+        enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.navigateChapter(-1)
     }
     Action {
         id: nextAction
         text: "&Next Chapter"
-        shortcut: "Ctrl+Right"
-        enabled: window.player.loaded && !window.transportBlocked && window.player.currentChapter + 1 < window.player.chapters.length
+        shortcut: "Down"
+        enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.navigateChapter(1)
     }
     Action {
@@ -154,6 +169,26 @@ ApplicationWindow {
         shortcut: "Right"
         enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.skip(10)
+    }
+    Action {
+        id: slowerAction
+        text: "&Decrease Playback Speed"
+        shortcut: "Ctrl+Left"
+        enabled: window.player.loaded && !window.transportBlocked && window.player.speed > window.minimumSpeed + 0.001
+        onTriggered: window.changeSpeed(-0.1)
+    }
+    Action {
+        id: fasterAction
+        text: "&Increase Playback Speed"
+        shortcut: "Ctrl+Right"
+        enabled: window.player.loaded && !window.transportBlocked && window.player.speed < window.maximumSpeed - 0.001
+        onTriggered: window.changeSpeed(0.1)
+    }
+    Action {
+        id: closeAction
+        text: "&Close Window"
+        shortcut: StandardKey.Close
+        onTriggered: window.close()
     }
     Action {
         id: chaptersAction
@@ -234,17 +269,10 @@ ApplicationWindow {
         onTriggered: { window.closeUtilityPopups(null); equalizerWindow.openPanel() }
     }
     Action {
-        id: fillCoverAction
-        text: "&Fill Cover Background"
-        checkable: true
-        checked: window.preferences.fillCover
-        onTriggered: window.preferences.fillCover = checked
-    }
-    Action {
-        id: appearanceAction
-        text: "&Appearance…"
+        id: settingsAction
+        text: "&Settings…"
         shortcut: "Ctrl+,"
-        onTriggered: { window.closeUtilityPopups(null); settings.open() }
+        onTriggered: { window.closeUtilityPopups(null); settingsWindow.openSettings() }
     }
     Action {
         id: fullScreenAction
@@ -260,9 +288,10 @@ ApplicationWindow {
 
     // Menus group commands by what they act on, and each command appears once:
     // File = the book and its files; Playback = position, chapters, speed and
-    // sound; View = what is shown; Help. Appearance settings live in one dialog.
+    // sound; View = what is shown; Help. Global preferences live in Settings.
     menuBar: MenuBar {
         Menu {
+            objectName: "fileMenu"
             title: "&File"
             width: Math.min(window.width - 16, 380)
             MenuCommand { action: openAction; keyHint: "Ctrl+O" }
@@ -295,6 +324,9 @@ ApplicationWindow {
                 height: visible ? implicitHeight : 0
             }
             MenuSeparator {}
+            MenuCommand { action: settingsAction }
+            MenuSeparator {}
+            MenuCommand { action: closeAction; keyHint: "Ctrl+W" }
             MenuCommand {
                 keyHint: "Ctrl+Q"
                 action: Action {
@@ -332,6 +364,8 @@ ApplicationWindow {
                     }
                 }
             }
+            MenuCommand { action: slowerAction }
+            MenuCommand { action: fasterAction }
             MenuSeparator {}
             MenuCommand { action: volumeAction }
             MenuCommand {
@@ -357,8 +391,6 @@ ApplicationWindow {
             width: Math.min(window.width - 16, 300)
             MenuCommand { action: captionsAction }
             MenuCommand { action: fullScreenAction }
-            MenuSeparator {}
-            MenuCommand { action: appearanceAction }
         }
         Menu {
             title: "&Help"
@@ -366,7 +398,7 @@ ApplicationWindow {
             MenuCommand {
                 action: Action {
                     text: "Player &Help"
-                    shortcut: "F1"
+                    shortcut: "Ctrl+Shift+H"
                     onTriggered: helpDialog.open()
                 }
             }
@@ -393,13 +425,14 @@ ApplicationWindow {
             width: parent.width
             text: window.player.fileUrl.toString() ? "Opening audiobook…" : "Your next chapter"
             color: window.palette.windowText
-            font.pixelSize: 28
+            font.pixelSize: Math.round(window.preferences.playerTextSize * 1.75)
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
         }
         Label {
             width: parent.width
             text: "Open an M4B file to listen and read its embedded captions."
+            font.pixelSize: window.preferences.playerTextSize
             color: window.palette.windowText
             opacity: 0.75
             horizontalAlignment: Text.AlignHCenter
@@ -440,7 +473,8 @@ ApplicationWindow {
             visible: window.player.captionText.length > 0
             height: visible ? Math.min(caption.implicitHeight + 36, window.contentItem.height * 0.43) : 0
             radius: 18
-            color: "#000000"
+            // Transparency fades only the panel; outlined text stays opaque.
+            color: Qt.rgba(0, 0, 0, 1 - window.preferences.captionTransparency / 100)
             Item {
                 id: captionViewport
                 anchors.fill: parent
@@ -455,6 +489,8 @@ ApplicationWindow {
                     wrapMode: Text.Wrap
                     horizontalAlignment: Text.AlignHCenter
                     color: "#ffffff"
+                    style: Text.Outline
+                    styleColor: "#000000"
                     font.pixelSize: window.preferences.captionSize
                     Accessible.role: Accessible.StaticText
                     Accessible.name: text
@@ -487,6 +523,7 @@ ApplicationWindow {
                     id: progressHeader
                     Layout.fillWidth: true
                     textColor: window.palette.windowText
+                    textSize: window.preferences.playerTextSize
                     chapterText: window.player.currentChapter >= 0 ? window.player.chapters[window.player.currentChapter].title : "Whole book"
                     positionText: window.formatTime(window.player.position - window.player.chapterStart) + " of " + window.formatTime(window.player.chapterEnd - window.player.chapterStart)
                     readonly property real remaining: Math.max(0, window.player.duration - window.player.position)
@@ -756,41 +793,18 @@ ApplicationWindow {
             }
         }
     }
-    Popup {
-        id: settings
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(window.width - 32, 360)
-        modal: true
-        focus: true
-        ColumnLayout {
-            anchors.fill: parent
-            Label { text: "Appearance"; font.pixelSize: 22 }
-            CheckBox { action: fillCoverAction; text: "Fill cover background" }
-            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: "In Fill mode, drag the cover vertically to adjust its crop." }
-            Label { text: "Caption size: " + window.preferences.captionSize }
-            Slider {
-                id: captionSizeSlider
-                Layout.fillWidth: true
-                from: 18
-                to: 42
-                stepSize: 1
-                value: window.preferences.captionSize
-                Accessible.name: "Caption text size"
-                onMoved: window.preferences.captionSize = value
-            }
-            Button { text: "Close"; onClicked: settings.close() }
-        }
-    }
+    // F1 is the usual Linux help key; Ctrl+Shift+H matches the macOS app.
+    Shortcut { sequence: "F1"; onActivated: helpDialog.open() }
     InfoPopup {
         id: helpDialog
         title: "Player Help"
         anchors.centerIn: Overlay.overlay
         width: Math.min(window.width - 32, 440)
         message: "Open a book with File → Open Audiobook or Open Recent. Books open paused and remember your position.\n\n"
-            + "Space: Play / pause\nLeft / Right: Back / forward 10 seconds\nCtrl+Left / Right: Previous / next chapter\nCtrl+J: Chapters\nCtrl+I: Audiobook info\nCtrl+N: Notes\nCtrl+E: EQ\nCtrl+S: Stop (Save while editing notes)\nCtrl+Up / Down: Volume + / − 5%\nCtrl+Shift+C: Toggle captions\nCtrl+,: Appearance\nF11: Full screen\n\n"
+            + "Space: Play / pause\nEscape: Stop and return to the chapter start\nUp / Down: Previous / next chapter\nLeft / Right: Back / forward 10 seconds\nCtrl+Left / Right: Playback speed − / + 0.1×\nCtrl+Up / Down: Volume + / − 5%\nCtrl+J: Chapters\nCtrl+Shift+C: Toggle captions\nCtrl+I: Audiobook info\nCtrl+N: Notes (Ctrl+S saves)\nCtrl+E: EQ\nCtrl+,: Settings\nCtrl+W: Close window\nCtrl+Shift+H or F1: Help\nF11: Full screen\n\n"
             + "Notes use explicit Save/Cancel; an empty note clears it. EQ starts bypassed and applies across books for this session. Tone runs from warm to clear; Hz changes its balance point. Boost adds up to 24 dB with peak limiting; higher settings reduce dynamics. Reset restores neutral tone, 1000 Hz and zero Boost without changing bypass. Automatic headroom makes room for boosted frequencies.\n\n"
             + "File has book details, notes and WAV export. Export Current Chapter saves the whole chapter at the playhead; Export Current Caption Chunk saves the active caption's audio, even with captions hidden. Exports are 16-bit WAV at the original sample rate, without speed, volume or EQ.\n\n"
-            + "Playback has transport, chapters, speed, Stop After Chapter, volume and EQ. View toggles captions once indexing finishes, full screen and Appearance (cover fill and caption size). In Fill mode, drag vertically on the cover to reframe it."
+            + "Playback has transport, chapters, speed, Stop After Chapter, volume and EQ. View toggles captions once indexing finishes and full screen. File → Settings holds launch resume, the Stop After Chapter default, cover display, text sizes and caption background. In Fill mode, drag vertically on the cover to reframe it."
     }
     InfoPopup {
         id: alertDialog
