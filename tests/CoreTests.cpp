@@ -3,6 +3,7 @@
 #include "MetadataReader.h"
 #include "AudioExporter.h"
 #include "AudiobookInfo.h"
+#include "CaptionCache.h"
 #include <QDir>
 #include <QRegularExpression>
 #include <QFile>
@@ -233,6 +234,64 @@ private slots:
         const auto missing = AudiobookInfo::read(QString(FIXTURE_DIR) + "/missing.m4b", cancel);
         QVERIFY(!missing.value("fileError").toString().isEmpty());
         QVERIFY(!missing.value("trackError").toString().isEmpty());
+    }
+    void captionCacheRoundTripsAndRejectsMismatches()
+    {
+        QTemporaryDir directory;
+        const QString fingerprint = "quick:v1:abc123";
+        const CaptionCache::Entry entry{3, {{0.5, 1.5, QString::fromUtf8("First — café")}, {3, 5.5, "Two\nlines"}}};
+        QVERIFY(!CaptionCache::load(directory.path(), fingerprint));
+        QVERIFY(CaptionCache::save(directory.path(), fingerprint, entry));
+        auto loaded = CaptionCache::load(directory.path(), fingerprint);
+        QVERIFY(loaded);
+        QCOMPARE(loaded->stream, 3);
+        QCOMPARE(loaded->cues.size(), 2);
+        QCOMPARE(loaded->cues[0].text, entry.cues[0].text);
+        QCOMPARE(loaded->cues[1].end, 5.5);
+        // An empty track is cached too, so it is not re-scanned.
+        QVERIFY(CaptionCache::save(directory.path(), "quick:v1:empty", {1, {}}));
+        QVERIFY(CaptionCache::load(directory.path(), "quick:v1:empty"));
+        // Same file name, different full fingerprint: not a hit.
+        QVERIFY(!CaptionCache::load(directory.path(), "quick:v2:abc123"));
+        QFile file(CaptionCache::fileFor(directory.path(), fingerprint));
+        QVERIFY(file.open(QIODevice::ReadWrite));
+        const QByteArray bytes = file.readAll();
+        file.resize(bytes.size() - 3); // truncated
+        file.close();
+        QVERIFY(!CaptionCache::load(directory.path(), fingerprint));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QByteArray wrongVersion = bytes;
+        wrongVersion[7] = char(99);
+        file.write(wrongVersion);
+        file.close();
+        QVERIFY(!CaptionCache::load(directory.path(), fingerprint));
+    }
+    void metadataCallbackRunsOnceAndCanSkipCaptions()
+    {
+        const auto cancel = std::make_shared<std::atomic_bool>(false);
+        int calls = 0;
+        const auto skipped = MetadataReader::read(QString(FIXTURE_DIR) + "/captions.m4b", cancel, [&](MediaData &metadata) {
+            ++calls;
+            [&] { QCOMPARE(metadata.chapters.size(), 2); QVERIFY(metadata.captions.isEmpty()); }();
+            return false;
+        });
+        QCOMPARE(calls, 1);
+        QVERIFY(skipped.error.isEmpty());
+        QVERIFY(skipped.captions.isEmpty());
+        QCOMPARE(skipped.captionStream, 1);
+        const auto indexed = MetadataReader::read(QString(FIXTURE_DIR) + "/captions.m4b", cancel, [&](MediaData &) {
+            ++calls;
+            return true;
+        });
+        QCOMPARE(calls, 2);
+        QCOMPARE(indexed.captions.size(), 2);
+        calls = 0;
+        const auto failed = MetadataReader::read(QString(FIXTURE_DIR) + "/missing.m4b", cancel, [&](MediaData &) {
+            ++calls;
+            return true;
+        });
+        QCOMPARE(calls, 0);
+        QVERIFY(!failed.error.isEmpty());
     }
     void chapterTextIsNotACaption()
     {

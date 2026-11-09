@@ -6,18 +6,68 @@
 #include "AudiobookInfo.h"
 #include "AudioExporter.h"
 #include "DesktopIntegration.h"
+#include "CaptionCache.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
-#include <QImage>
+#include <QBuffer>
+#include <QImageReader>
+#include <QPromise>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QThreadPool>
 #include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
 #include <cmath>
+#include <optional>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
+
+namespace {
+// Store the embedded artwork as its original bytes, once per book. The file is
+// keyed by the content fingerprint, so an existing file is never rewritten.
+// Covers cached by earlier versions as PNG are reused.
+QString cacheCover(const QString &directory, const QString &fingerprint, const QByteArray &bytes)
+{
+    if (bytes.isEmpty() || fingerprint.isEmpty())
+        return {};
+    const QDir dir(directory);
+    const QString base = fingerprint.section(':', -1);
+    QBuffer buffer;
+    buffer.setData(bytes);
+    buffer.open(QIODevice::ReadOnly);
+    QImageReader reader(&buffer);
+    const QByteArray format = reader.format();
+    if (format.isEmpty() || !reader.canRead())
+        return {};
+    const QString path = dir.filePath(base + "." + QString::fromLatin1(format));
+    for (const QString &existing : {path, dir.filePath(base + ".png")})
+        if (QFileInfo(existing).size() > 0)
+            return existing;
+    if (!QDir().mkpath(directory))
+        return {};
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit())
+        return {};
+    return path;
+}
+
+// Background jobs (container parsing, decoding, export) allocate tens of MB in
+// worker-thread malloc arenas that glibc keeps after they are freed. Return that
+// memory to the system when a job ends; trimming runs off the UI thread.
+void releaseFreedMemory()
+{
+#if defined(__GLIBC__)
+    QThreadPool::globalInstance()->start([] { malloc_trim(0); });
+#endif
+}
+}
 
 PlayerController::PlayerController(Library *library, const QString &cacheDirectory, bool silent, QObject *parent)
-    : QObject(parent), m_library(library), m_cacheDirectory(cacheDirectory), m_engine(silent)
+    : QObject(parent), m_library(library), m_cacheDirectory(cacheDirectory),
+      // Caches live side by side in the data directory: covers/ and captions/.
+      m_captionCacheDirectory(QFileInfo(cacheDirectory).absolutePath() + "/captions"), m_engine(silent)
 {
     m_recents = m_library->recentBooks();
     connect(this, &PlayerController::stateChanged, this, [this] {
@@ -192,73 +242,96 @@ void PlayerController::openBook(const QUrl &url)
     }
     const auto path = m_path;
     const auto cancel = m_cancel;
+    const auto coverDirectory = m_cacheDirectory;
+    const auto captionDirectory = m_captionCacheDirectory;
+    // One worker opens the book once: result 0 carries metadata, result 1 the
+    // captions (from the cache when available). A failed or cancelled metadata
+    // read produces only result 0.
     auto *watcher = new QFutureWatcher<MediaData>(this);
-    connect(watcher, &QFutureWatcher<MediaData>::finished, this, [this, watcher, generation, path, cancel] {
-        const auto data = watcher->result();
-        watcher->deleteLater();
+    connect(watcher, &QFutureWatcher<MediaData>::resultReadyAt, this, [this, watcher, generation, cancel](int index) {
+        const auto data = watcher->resultAt(index);
         if (generation != m_generation || cancel->load())
             return;
-        if (!data.error.isEmpty()) {
-            m_indexingCaptions = false;
-            report("Could not read the book: " + data.error);
+        if (index == 0)
+            applyMetadata(data);
+        else
+            applyCaptions(data);
+    });
+    connect(watcher, &QFutureWatcher<MediaData>::finished, this, [watcher] {
+        watcher->deleteLater();
+        releaseFreedMemory();
+    });
+    watcher->setFuture(QtConcurrent::run([path, cancel, coverDirectory, captionDirectory](QPromise<MediaData> &promise) {
+        bool metadataSent = false;
+        std::optional<CaptionCache::Entry> cached;
+        auto data = MetadataReader::read(path, cancel, [&](MediaData &metadata) {
+            metadata.coverPath = cacheCover(coverDirectory, metadata.fingerprint, metadata.cover);
+            metadata.cover.clear();
+            promise.addResult(metadata);
+            metadataSent = true;
+            cached = CaptionCache::load(captionDirectory, metadata.fingerprint);
+            return !cached.has_value();
+        });
+        if (!metadataSent) {
+            promise.addResult(data);
             return;
         }
-        m_title = data.title;
-        m_author = data.author;
-        if (data.duration > 0)
-            m_duration = data.duration;
-        m_chapters = data.chapters;
-        m_currentChapter = chapterAt(m_chapters, m_position);
-        m_fingerprint = data.fingerprint;
-        try {
-            const auto state = m_library->find(m_fingerprint);
-            m_resume = state.position;
-            m_rating = state.rating;
-            if (!m_captionsTouched)
-                m_captions = state.captions.value_or(false);
-            if (!m_stopTouched)
-                m_stopAfter = state.stopAfterChapter.value_or(m_stopAfterDefault);
-            m_metadataReady = true;
-            applyResume();
-            if (m_loaded && (m_captionsTouched || m_stopTouched))
-                savePreferences();
-        } catch (const std::exception &error) {
-            report("Library error: " + QString::fromUtf8(error.what()));
+        if (cached) {
+            data.captions = std::move(cached->cues);
+            data.captionStream = cached->stream;
+        } else if (data.error.isEmpty() && !cancel->load() && data.captionStream >= 0) {
+            CaptionCache::save(captionDirectory, data.fingerprint, {data.captionStream, data.captions});
         }
-        if (!data.cover.isEmpty()) {
-            const QString coverPath = m_cacheDirectory + "/" + m_fingerprint.section(':', -1) + ".png";
-            const auto image = QImage::fromData(data.cover);
-            if (!image.isNull() && QDir().mkpath(m_cacheDirectory)) {
-                QSaveFile file(coverPath);
-                if (file.open(QIODevice::WriteOnly) && image.save(&file, "PNG") && file.commit())
-                    m_cover = QUrl::fromLocalFile(coverPath);
-            }
-        }
-        emit stateChanged();
-        beginCaptionIndex(generation, path, cancel);
-    });
-    watcher->setFuture(QtConcurrent::run([path, cancel] { return MetadataReader::read(path, cancel, false); }));
+        data.cover.clear();
+        promise.addResult(data);
+    }));
     emit stateChanged();
 }
 
-void PlayerController::beginCaptionIndex(quint64 generation, const QString &path, const Cancellation &cancel)
+void PlayerController::applyMetadata(const MediaData &data)
 {
-    auto *watcher = new QFutureWatcher<MediaData>(this);
-    connect(watcher, &QFutureWatcher<MediaData>::finished, this, [this, watcher, generation, cancel] {
-        const auto data = watcher->result();
-        watcher->deleteLater();
-        if (generation != m_generation || cancel->load())
-            return;
+    if (!data.error.isEmpty()) {
         m_indexingCaptions = false;
-        if (!data.error.isEmpty())
-            report("Could not index captions: " + data.error);
-        else {
-            m_cues = data.captions;
-            m_captionStream = data.captionStream;
-        }
-        emit stateChanged();
-    });
-    watcher->setFuture(QtConcurrent::run([path, cancel] { return MetadataReader::read(path, cancel, true); }));
+        report("Could not read the book: " + data.error);
+        return;
+    }
+    m_title = data.title;
+    m_author = data.author;
+    if (data.duration > 0)
+        m_duration = data.duration;
+    m_chapters = data.chapters;
+    m_currentChapter = chapterAt(m_chapters, m_position);
+    m_fingerprint = data.fingerprint;
+    try {
+        const auto state = m_library->find(m_fingerprint);
+        m_resume = state.position;
+        m_rating = state.rating;
+        if (!m_captionsTouched)
+            m_captions = state.captions.value_or(false);
+        if (!m_stopTouched)
+            m_stopAfter = state.stopAfterChapter.value_or(m_stopAfterDefault);
+        m_metadataReady = true;
+        applyResume();
+        if (m_loaded && (m_captionsTouched || m_stopTouched))
+            savePreferences();
+    } catch (const std::exception &error) {
+        report("Library error: " + QString::fromUtf8(error.what()));
+    }
+    if (!data.coverPath.isEmpty())
+        m_cover = QUrl::fromLocalFile(data.coverPath);
+    emit stateChanged();
+}
+
+void PlayerController::applyCaptions(const MediaData &data)
+{
+    m_indexingCaptions = false;
+    if (!data.error.isEmpty()) {
+        report("Could not index captions: " + data.error);
+    } else {
+        m_cues = data.captions;
+        m_captionStream = data.captionStream;
+    }
+    emit stateChanged();
 }
 
 void PlayerController::applyResume()
@@ -569,6 +642,7 @@ void PlayerController::autoLoudness()
     connect(watcher, &QFutureWatcher<LoudnessResult>::finished, this, [this, watcher, request, load, start, end, cancel] {
         const auto result = watcher->result();
         watcher->deleteLater();
+        releaseFreedMemory();
         if (request != m_loudnessGeneration || load != m_generation || cancel->load())
             return;
         m_loudnessAnalyzing = false;
@@ -614,6 +688,7 @@ void PlayerController::loadBookInfo()
     connect(watcher, &QFutureWatcher<QVariantMap>::finished, this, [this, watcher, generation, cancel] {
         const auto info = watcher->result();
         watcher->deleteLater();
+        releaseFreedMemory();
         if (generation != m_generation || cancel->load())
             return;
         m_bookInfo = info;
@@ -701,6 +776,7 @@ bool PlayerController::exportAudio(const QVariantMap &range, const QUrl &destina
     connect(watcher, &QFutureWatcher<ExportResult>::finished, this, [this, watcher] {
         const auto result = watcher->result();
         watcher->deleteLater();
+        releaseFreedMemory();
         m_exporting = false;
         emit exportingChanged();
         if (!result.cancelled)

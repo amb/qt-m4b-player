@@ -108,6 +108,12 @@ QByteArray fallbackCover(const QString &path, const Cancellation &cancel)
 
 MediaData MetadataReader::read(const QString &path, const Cancellation &cancel, bool indexCaptions)
 {
+    return read(path, cancel, [indexCaptions](MediaData &) { return indexCaptions; });
+}
+
+MediaData MetadataReader::read(const QString &path, const Cancellation &cancel,
+                               const std::function<bool(MediaData &)> &metadataReady)
+{
     MediaData result;
     try {
         if (cancel->load())
@@ -173,8 +179,13 @@ MediaData MetadataReader::read(const QString &path, const Cancellation &cancel, 
         result.captionStream = subtitle;
         if (result.cover.isEmpty() && !cancel->load())
             result.cover = fallbackCover(path, cancel);
-        if (!indexCaptions || subtitle < 0 || cancel->load())
+        if (cancel->load() || !metadataReady(result) || subtitle < 0 || cancel->load())
             return result;
+        // Only the caption samples are needed. Discarding the other streams lets
+        // the demuxer seek past audio instead of reading it, which matters on
+        // network shares.
+        for (unsigned i = 0; i < format->nb_streams; ++i)
+            format->streams[i]->discard = int(i) == subtitle ? AVDISCARD_DEFAULT : AVDISCARD_ALL;
         AVPacket *packet = av_packet_alloc();
         if (!packet)
             throw std::runtime_error("Cannot allocate caption packet");

@@ -341,7 +341,7 @@ development and use mounted network paths to validate share loading and seeking.
 
 ### Data and settings
 
-The library database, settings and artwork cache live in
+The library database, settings and the artwork and caption caches live in
 `~/.local/share/qt-m4b-player/qt-m4b-player/`. Override it with `--data-dir`.
 Debug, release and installed builds share data when using the same directory.
 Schema upgrades first write a timestamped backup beside the database.

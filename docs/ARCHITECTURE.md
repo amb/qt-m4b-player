@@ -37,10 +37,17 @@ additional memory. Seeks outside the cached range read from the source file.
 
 ## Book loading, artwork and captions
 
-Book opening starts libmpv paused and separately reads the lightweight metadata
-and sampled identity. Saved progress is restored only after both results are
-ready, unless the user has already performed a transport action. Artwork is
-cached separately. Caption indexing begins afterward and does not block playback.
+Book opening starts libmpv paused and runs one worker that opens the container
+once. Opening an MP4 parses its sample tables, about 44 MB for a 12-hour book, so
+metadata and captions share that open. The worker first publishes metadata and
+sampled identity (result 0); saved progress is restored once both it and libmpv
+are ready, unless the user has already performed a transport action. Captions
+follow (result 1) and never block playback. They come from the `captions/` cache
+when it has the book's fingerprint; otherwise the selected track is indexed with
+every other stream discarded, so the demuxer seeks past audio instead of reading
+it, and the result is cached. Reopening a 347 MB, 12-hour book reads about 10 MiB
+instead of 357 MiB. The worker stores embedded artwork as its original bytes in
+`covers/`, once per fingerprint, off the UI thread.
 If FFmpeg supplies no artwork, a bounded, read-only MP4 box reader checks
 `moov/udta/meta/ilst/covr/data` and lets Qt identify the image. This recovers
 older books whose embedded JPEG has an unspecified image type, which FFmpeg
@@ -127,6 +134,16 @@ Changes are coalesced over 60 ms before replacing the graph, rather than using
 the reference's per-sample 10 ms smoothing. Filter command errors disable EQ and
 are shown to the user. Audible adjustment quality needs manual validation.
 
+## Memory
+
+Background jobs (container parsing, caption indexing, loudness, export, Info)
+allocate in worker-thread malloc arenas, which glibc keeps after the memory is
+freed. When a job ends, `malloc_trim(0)` returns it to the system on a pool
+thread. In a scripted session with a 12-hour book this cut end-of-session
+anonymous memory from 227–326 MB to 158–164 MB. Transient peaks during loudness
+measurement and export (about 220 MB) are the decoder and the extra container
+index for that job.
+
 ## Frosted transport panel
 
 The frosted transport panel samples the same cover image and framing rectangle
@@ -198,7 +215,6 @@ Gaps relative to the macOS reference app:
 | Drag-and-drop opening | No audiobook drop target or drag overlay in Qt. |
 | Desktop open routing | A basic desktop entry accepts a file argument, but forwarding opens to an existing process/window is not implemented. |
 | More global preferences | No configurable playback-rate list or custom foreground/background colors. |
-| Caption index cache | Caption indexes are not cached; indexing a large book can delay CC availability. |
 | Database recovery | Only the automatic pre-migration backup exists; there is no restore UI or downgrade path. |
 | macOS interoperability | Explicitly out of scope; see the [storage scope decision](STORAGE.md#scope-decision-the-qt-schema-is-its-own-design). |
 

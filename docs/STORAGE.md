@@ -65,17 +65,22 @@ include a known fixture fingerprint in [CoreTests.cpp](../tests/CoreTests.cpp).
 
 The default directory is normally
 `~/.local/share/qt-m4b-player/qt-m4b-player/`. `--data-dir DIRECTORY` redirects all
-three stores below. Debug, release and installed builds use the same directory
+four stores below. Debug, release and installed builds use the same directory
 unless overridden.
 
 | Store | Purpose |
 | --- | --- |
 | `library.sqlite` | Books, listening progress, notes, ratings, per-book CC / Stop After Chapter preferences and known file locations. |
 | `settings.ini` | Global appearance and desktop window preferences through Qt `QSettings`. |
-| `covers/` | Replaceable extracted artwork cache; artwork paths are not stored in the database. |
+| `covers/` | Replaceable artwork cache: `<digest>.<format>` holds the embedded image's original bytes (usually JPEG), written once per fingerprint. Covers cached as `<digest>.png` by earlier versions are reused. Paths are not stored in the database. |
+| `captions/` | Replaceable caption-index cache: `<digest>.captions`, a versioned binary file with the full fingerprint, the indexed stream and its cues. It is written once after indexing and read instead of re-indexing. A missing, corrupt, mismatched or older-version file is ignored and rebuilt. |
 
-Chapters and caption cues are read from the audiobook, not stored in SQLite.
-Caption indexing runs in the background and currently repeats when a book opens.
+Chapters are read from the audiobook on every open; caption cues come from the
+cache when present. Neither is stored in SQLite. `<digest>` is the fingerprint's
+SHA-256 part. Because the fingerprint samples only the start, end and size of a
+file, a book edited only in the middle keeps its cached captions; delete its
+`captions/` file to re-index it. Bump `CaptionCache::version` when indexing rules
+change.
 
 ## SQLite schema v2
 

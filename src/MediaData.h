@@ -28,6 +28,8 @@ struct MediaData {
     double duration = 0;
     QVector<Chapter> chapters;
     QByteArray cover;
+    // Cached artwork file, when the caller stored the cover (cover is then empty).
+    QString coverPath;
     QVector<CaptionCue> captions;
     // Container stream index of the selected mov_text track, or -1.
     int captionStream = -1;

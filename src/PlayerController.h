@@ -140,7 +140,8 @@ signals:
     // Emitted when an export ends; error is empty on success.
     void exportFinished(const QString &error);
 private:
-    void beginCaptionIndex(quint64 generation, const QString &path, const Cancellation &cancel);
+    void applyMetadata(const MediaData &data);
+    void applyCaptions(const MediaData &data);
     void applyResume();
     void save();
     void savePreferences();
@@ -150,6 +151,7 @@ private:
     void applyEqualizerBoost(double boost);
     Library *m_library;
     QString m_cacheDirectory;
+    QString m_captionCacheDirectory;
     MpvEngine m_engine;
     QTimer m_checkpoint;
     QTimer m_equalizerUpdate;

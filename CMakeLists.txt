@@ -42,6 +42,7 @@ add_library(player-core STATIC
     src/AudioExporter.h src/AudioExporter.cpp
     src/AudiobookInfo.h src/AudiobookInfo.cpp
     src/DesktopIntegration.h src/DesktopIntegration.cpp
+    src/CaptionCache.h src/CaptionCache.cpp
 )
 target_include_directories(player-core PUBLIC src)
 target_link_libraries(player-core PUBLIC Qt6::Core Qt6::Gui Qt6::Sql Qt6::DBus

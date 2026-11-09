@@ -1,5 +1,8 @@
 #include "Library.h"
 #include "PlayerController.h"
+#include <QDir>
+#include "MetadataReader.h"
+#include "CaptionCache.h"
 #include <QFile>
 #include <QTemporaryDir>
 #include <QElapsedTimer>
@@ -243,6 +246,40 @@ private slots:
         player.openBook(fixture("captions"));
         QTRY_VERIFY_WITH_TIMEOUT(player.notesAvailable(), 10000);
         QVERIFY(!player.stopAfterChapter());
+    }
+    void reopeningUsesCachedCaptionsAndCover()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.notesAvailable() && player.captionsAvailable(), 10000);
+        // The cover is kept as the original embedded JPEG, not re-encoded.
+        const QString cover = player.coverUrl().toLocalFile();
+        QVERIFY2(cover.endsWith(".jpeg"), qPrintable(cover));
+        const QDateTime written = QFileInfo(cover).lastModified();
+        const auto fingerprint = MetadataReader::read(fixture("captions").toLocalFile(),
+            std::make_shared<std::atomic_bool>(false), false).fingerprint;
+        const QString captions = directory.filePath("captions");
+        auto entry = CaptionCache::load(captions, fingerprint);
+        QVERIFY(entry);
+        QCOMPARE(entry->cues.size(), 2);
+        // Prove that reopening reads the cache: alter it, then reopen.
+        entry->cues[0].text = "From the cache";
+        QVERIFY(CaptionCache::save(captions, fingerprint, *entry));
+        QTest::qWait(20);
+        player.openBook(fixture("no-captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.loaded() && !player.indexingCaptions(), 10000);
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.notesAvailable() && player.captionsAvailable(), 10000);
+        QCOMPARE(player.captionStream(), 1);
+        player.setCaptions(true);
+        player.seek(1);
+        QTRY_COMPARE(player.captionText(), QString("From the cache"));
+        QCOMPARE(player.coverUrl().toLocalFile(), cover);
+        QCOMPARE(QFileInfo(cover).lastModified(), written);
+        // One file for this book: no temporary leftovers and no PNG copy.
+        QCOMPARE(QDir(directory.filePath("covers")).entryList({fingerprint.section(':', -1) + "*"}, QDir::Files).size(), 1);
     }
     void realPausedSeekingAndTransport()
     {
