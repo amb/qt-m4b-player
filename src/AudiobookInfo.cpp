@@ -14,9 +14,11 @@ extern "C" {
 namespace {
 const QString unknown = QStringLiteral("Unknown");
 
+// ISO 8601 local time. Locale long formats spell weekday and month names from
+// LC_TIME, which need not match the desktop's display language.
 QString date(const QDateTime &time)
 {
-    return time.isValid() ? QLocale().toString(time.toLocalTime(), QLocale::LongFormat) : unknown;
+    return time.isValid() ? time.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) : unknown;
 }
 
 QString codecName(AVCodecID id)

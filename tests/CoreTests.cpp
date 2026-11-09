@@ -4,6 +4,7 @@
 #include "AudioExporter.h"
 #include "AudiobookInfo.h"
 #include <QDir>
+#include <QRegularExpression>
 #include <QFile>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -216,6 +217,8 @@ private slots:
         QVERIFY(info.value("trackError").toString().isEmpty());
         QCOMPARE(info.value("fileName").toString(), QString("captions.m4b"));
         QVERIFY(info.value("size").toString().contains("bytes"));
+        const QRegularExpression iso(QStringLiteral("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"));
+        QVERIFY2(iso.match(info.value("modified").toString()).hasMatch(), qPrintable(info.value("modified").toString()));
         const auto audio = info.value("audioTracks").toList();
         QCOMPARE(audio.size(), 1);
         QVERIFY(audio[0].toMap().value("codec").toString().contains("aac"));
