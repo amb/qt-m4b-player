@@ -195,7 +195,7 @@ macOS uses SwiftUI `@AppStorage` backed by `UserDefaults`. Qt uses
 | `window/width`, `window/height` | Normal window size; saved on orderly exit and bounded by the current screen/UI minimum when restored. |
 | `window/maximized` | Maximized-state persistence; minimized/fullscreen states do not become launch modes. |
 
-Caption size changes through either View or Appearance use the same saved value.
+Caption size and Fill/Fit are changed in View → Appearance.
 CC enabled and Stop After Chapter remain per-book SQLite preferences.
 Window placement belongs to the desktop/window manager. Cover drag position,
 playback speed and volume are not persisted across app launches.

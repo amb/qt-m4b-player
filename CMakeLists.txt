@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql Concurrent)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql Concurrent DBus)
 qt_standard_project_setup(REQUIRES 6.5)
 if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
     qt_policy(SET QTP0004 NEW)
@@ -28,9 +28,13 @@ add_library(player-core STATIC
     src/MpvEngine.h src/MpvEngine.cpp
     src/TiltEqualizer.h
     src/LoudnessReader.h src/LoudnessReader.cpp
+    src/AudioDecode.h src/AudioDecode.cpp
+    src/AudioExporter.h src/AudioExporter.cpp
+    src/AudiobookInfo.h src/AudiobookInfo.cpp
+    src/DesktopIntegration.h src/DesktopIntegration.cpp
 )
 target_include_directories(player-core PUBLIC src)
-target_link_libraries(player-core PUBLIC Qt6::Core Qt6::Gui Qt6::Sql
+target_link_libraries(player-core PUBLIC Qt6::Core Qt6::Gui Qt6::Sql Qt6::DBus
     PkgConfig::MPV PkgConfig::AVFORMAT PkgConfig::AVCODEC PkgConfig::AVUTIL PkgConfig::AVFILTER)
 target_compile_options(player-core PRIVATE -Wall -Wextra -Wpedantic)
 add_executable(media-inspect tools/InspectMedia.cpp)
@@ -47,7 +51,7 @@ add_custom_target(player-build-info
 add_dependencies(qt-m4b-player player-build-info)
 target_include_directories(qt-m4b-player PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(PLAYER_QML_FILES qml/Main.qml qml/TransportButton.qml qml/TransportIcon.qml qml/MenuCommand.qml
-    qml/CoverArtwork.qml qml/ProgressHeader.qml qml/InfoPopup.qml qml/NotesEditor.qml qml/EqualizerWindow.qml qml/StarIcon.qml qml/TransportPopup.qml)
+    qml/CoverArtwork.qml qml/ProgressHeader.qml qml/InfoPopup.qml qml/NotesEditor.qml qml/EqualizerWindow.qml qml/StarIcon.qml qml/TransportPopup.qml qml/BookInfoWindow.qml)
 qt_add_qml_module(qt-m4b-player
     URI AudiobookPlayer
     VERSION 1.0

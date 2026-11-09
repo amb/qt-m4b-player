@@ -3,11 +3,15 @@
 #include "MetadataReader.h"
 #include "TiltEqualizer.h"
 #include "LoudnessReader.h"
+#include "AudiobookInfo.h"
+#include "AudioExporter.h"
+#include "DesktopIntegration.h"
 #include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QImage>
 #include <QSaveFile>
+#include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
 #include <cmath>
@@ -152,6 +156,11 @@ void PlayerController::openBook(const QUrl &url)
     cancelLoudness();
     m_loudnessStatus.clear();
     emit loudnessChanged();
+    if (m_bookInfoCancel)
+        m_bookInfoCancel->store(true);
+    m_bookInfo.clear();
+    m_bookInfoLoading = false;
+    emit bookInfoChanged();
     save();
     if (m_cancel)
         m_cancel->store(true);
@@ -165,6 +174,7 @@ void PlayerController::openBook(const QUrl &url)
     m_error.clear();
     m_chapters.clear();
     m_cues.clear();
+    m_captionStream = -1;
     m_chapterPositions.clear();
     m_currentChapter = -1;
     m_rating = 0;
@@ -242,8 +252,10 @@ void PlayerController::beginCaptionIndex(quint64 generation, const QString &path
         m_indexingCaptions = false;
         if (!data.error.isEmpty())
             report("Could not index captions: " + data.error);
-        else
+        else {
             m_cues = data.captions;
+            m_captionStream = data.captionStream;
+        }
         emit stateChanged();
     });
     watcher->setFuture(QtConcurrent::run([path, cancel] { return MetadataReader::read(path, cancel, true); }));
@@ -578,8 +590,126 @@ void PlayerController::autoLoudness()
     }));
 }
 
+void PlayerController::loadBookInfo()
+{
+    if (!m_loaded)
+        return;
+    if (m_bookInfoCancel)
+        m_bookInfoCancel->store(true);
+    const auto cancel = m_bookInfoCancel = std::make_shared<std::atomic_bool>(false);
+    const quint64 generation = m_generation;
+    const QString path = m_path;
+    m_bookInfo.clear();
+    m_bookInfoLoading = true;
+    emit bookInfoChanged();
+    auto *watcher = new QFutureWatcher<QVariantMap>(this);
+    connect(watcher, &QFutureWatcher<QVariantMap>::finished, this, [this, watcher, generation, cancel] {
+        const auto info = watcher->result();
+        watcher->deleteLater();
+        if (generation != m_generation || cancel->load())
+            return;
+        m_bookInfo = info;
+        m_bookInfoLoading = false;
+        emit bookInfoChanged();
+    });
+    watcher->setFuture(QtConcurrent::run([path, cancel] { return AudiobookInfo::read(path, cancel); }));
+}
+
+void PlayerController::copyPath() const
+{
+    if (!m_path.isEmpty())
+        DesktopIntegration::copyText(m_path);
+}
+
+void PlayerController::showInFileManager() const
+{
+    if (!m_path.isEmpty())
+        DesktopIntegration::revealFile(m_path);
+}
+
+namespace {
+QString exportBaseName(const QString &title)
+{
+    return title.trimmed().isEmpty() ? QStringLiteral("Audiobook") : title.trimmed();
+}
+
+// The last export folder in this session, otherwise Music, otherwise home.
+QUrl exportFolder(const QString &previous)
+{
+    if (!previous.isEmpty() && QFileInfo(previous).isDir())
+        return QUrl::fromLocalFile(previous);
+    const QString music = QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
+    return QUrl::fromLocalFile(!music.isEmpty() && QFileInfo(music).isDir() ? music : QDir::homePath());
+}
+}
+
+QVariantMap PlayerController::chapterExportRange() const
+{
+    if (!chapterExportAvailable())
+        return {};
+    const int index = std::clamp(chapterAt(m_chapters, m_position), 0, int(m_chapters.size()) - 1);
+    const auto &chapter = m_chapters[index];
+    const double end = m_duration > 0 ? std::min(chapter.end, m_duration) : chapter.end;
+    const int digits = std::max(2, int(QString::number(m_chapters.size()).size()));
+    const QString name = exportBaseName(m_title) + " - "
+        + QString::number(index + 1).rightJustified(digits, '0') + " " + chapter.title;
+    return {{"path", m_path}, {"start", chapter.start}, {"end", end},
+            {"fileName", AudioExporter::safeFileName(name) + ".wav"},
+            {"folder", exportFolder(m_exportFolder)}};
+}
+
+QVariantMap PlayerController::chunkExportRange() const
+{
+    if (!chunkExportAvailable())
+        return {};
+    const auto *cue = captionAt(m_cues, m_position);
+    if (!cue || (m_duration > 0 && m_position >= m_duration))
+        return {{"gap", true}};
+    const double end = m_duration > 0 ? std::min(cue->end, m_duration) : cue->end;
+    const qint64 ms = qRound64(cue->start * 1000);
+    const QString stamp = QString("%1-%2-%3.%4").arg(ms / 3600000)
+        .arg(ms / 60000 % 60, 2, 10, QChar('0')).arg(ms / 1000 % 60, 2, 10, QChar('0'))
+        .arg(ms % 1000, 3, 10, QChar('0'));
+    return {{"path", m_path}, {"start", cue->start}, {"end", end},
+            {"fileName", AudioExporter::safeFileName(exportBaseName(m_title) + " - " + stamp) + ".wav"},
+            {"folder", exportFolder(m_exportFolder)}};
+}
+
+bool PlayerController::exportAudio(const QVariantMap &range, const QUrl &destination)
+{
+    const QString source = range.value("path").toString();
+    const double start = range.value("start").toDouble();
+    const double end = range.value("end").toDouble();
+    if (m_exporting || source.isEmpty() || !destination.isLocalFile() || !(end > start))
+        return false;
+    QString target = destination.toLocalFile();
+    if (QFileInfo(target).suffix().isEmpty())
+        target += ".wav";
+    m_exportFolder = QFileInfo(target).absolutePath();
+    const auto cancel = m_exportCancel = std::make_shared<std::atomic_bool>(false);
+    m_exporting = true;
+    emit exportingChanged();
+    auto *watcher = new QFutureWatcher<ExportResult>(this);
+    connect(watcher, &QFutureWatcher<ExportResult>::finished, this, [this, watcher] {
+        const auto result = watcher->result();
+        watcher->deleteLater();
+        m_exporting = false;
+        emit exportingChanged();
+        if (!result.cancelled)
+            emit exportFinished(result.error);
+    });
+    watcher->setFuture(QtConcurrent::run([source, start, end, target, cancel] {
+        return AudioExporter::writeWav(source, start, end, target, cancel);
+    }));
+    return true;
+}
+
 void PlayerController::shutdown()
 {
+    if (m_exportCancel)
+        m_exportCancel->store(true);
+    if (m_bookInfoCancel)
+        m_bookInfoCancel->store(true);
     cancelLoudness();
     if (m_cancel)
         m_cancel->store(true);

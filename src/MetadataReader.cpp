@@ -170,6 +170,7 @@ MediaData MetadataReader::read(const QString &path, const Cancellation &cancel, 
                 }
             }
         }
+        result.captionStream = subtitle;
         if (result.cover.isEmpty() && !cancel->load())
             result.cover = fallbackCover(path, cancel);
         if (!indexCaptions || subtitle < 0 || cancel->load())

@@ -45,6 +45,12 @@ class PlayerController : public QObject {
     Q_PROPERTY(bool loudnessAnalyzing READ loudnessAnalyzing NOTIFY loudnessChanged)
     Q_PROPERTY(QString loudnessStatus READ loudnessStatus NOTIFY loudnessChanged)
     Q_PROPERTY(QVariantList equalizerResponse READ equalizerResponse NOTIFY equalizerChanged)
+    Q_PROPERTY(int captionStream READ captionStream NOTIFY stateChanged)
+    Q_PROPERTY(QVariantMap bookInfo READ bookInfo NOTIFY bookInfoChanged)
+    Q_PROPERTY(bool bookInfoLoading READ bookInfoLoading NOTIFY bookInfoChanged)
+    Q_PROPERTY(bool chapterExportAvailable READ chapterExportAvailable NOTIFY stateChanged)
+    Q_PROPERTY(bool chunkExportAvailable READ chunkExportAvailable NOTIFY stateChanged)
+    Q_PROPERTY(bool exporting READ exporting NOTIFY exportingChanged)
 public:
     explicit PlayerController(Library *library, const QString &cacheDirectory, bool silent = false,
                               QObject *parent = nullptr);
@@ -83,6 +89,21 @@ public:
     bool loudnessAnalyzing() const { return m_loudnessAnalyzing; }
     QString loudnessStatus() const { return m_loudnessStatus; }
     QVariantList equalizerResponse() const;
+    // Stream index of the track that supplies captions, or -1 when none is usable.
+    int captionStream() const { return m_cues.isEmpty() ? -1 : m_captionStream; }
+    QVariantMap bookInfo() const { return m_bookInfo; }
+    bool bookInfoLoading() const { return m_bookInfoLoading; }
+    Q_INVOKABLE void loadBookInfo();
+    Q_INVOKABLE void copyPath() const;
+    Q_INVOKABLE void showInFileManager() const;
+    bool chapterExportAvailable() const { return m_loaded && !m_chapters.isEmpty(); }
+    bool chunkExportAvailable() const { return m_loaded && !m_cues.isEmpty(); }
+    bool exporting() const { return m_exporting; }
+    // Capture an export range at the playhead: {path, start, end, fileName, folder}.
+    // Empty when unavailable; the chunk range has gap=true between cues.
+    Q_INVOKABLE QVariantMap chapterExportRange() const;
+    Q_INVOKABLE QVariantMap chunkExportRange() const;
+    Q_INVOKABLE bool exportAudio(const QVariantMap &range, const QUrl &destination);
     Q_INVOKABLE QVariantMap notesForEditing();
     Q_INVOKABLE QString saveNotes(const QString &fingerprint, const QString &text);
     Q_INVOKABLE void setEqualizerEnabled(bool enabled);
@@ -111,6 +132,10 @@ signals:
     void stateChanged();
     void equalizerChanged();
     void loudnessChanged();
+    void bookInfoChanged();
+    void exportingChanged();
+    // Emitted when an export ends; error is empty on success.
+    void exportFinished(const QString &error);
 private:
     void beginCaptionIndex(quint64 generation, const QString &path, const Cancellation &cancel);
     void applyResume();
@@ -134,6 +159,13 @@ private:
     bool m_loudnessAnalyzing = false;
     double m_loudnessStart = 0, m_loudnessEnd = 0;
     QString m_loudnessStatus;
+    Cancellation m_bookInfoCancel;
+    QVariantMap m_bookInfo;
+    bool m_bookInfoLoading = false;
+    Cancellation m_exportCancel;
+    bool m_exporting = false;
+    QString m_exportFolder;
+    int m_captionStream = -1;
     Cancellation m_cancel;
     quint64 m_generation = 0;
     QString m_path, m_fingerprint, m_title = "Open an audiobook", m_author, m_error;

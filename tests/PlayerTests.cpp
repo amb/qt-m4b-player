@@ -9,6 +9,8 @@
 #include <QSqlQuery>
 #include <QDataStream>
 #include <QtTest>
+#include <QSignalSpy>
+#include <QFileInfo>
 #include <clocale>
 
 class PlayerTests : public QObject {
@@ -157,6 +159,68 @@ private slots:
         QCOMPARE(process.exitStatus(), QProcess::NormalExit);
         QVERIFY2(process.exitCode() == 0, errors.constData());
         QVERIFY2(!errors.contains("Binding loop"), errors.constData());
+    }
+    void exportRangesFollowThePlayheadAndExportInBackground()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        QVERIFY(player.chapterExportRange().isEmpty());
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.notesAvailable() && player.chunkExportAvailable(), 10000);
+        QVERIFY(player.chapterExportAvailable());
+        QVERIFY(!player.captionsEnabled());
+        player.seek(4);
+        auto chapter = player.chapterExportRange();
+        QCOMPARE(chapter.value("start").toDouble(), 3.0);
+        QCOMPARE(chapter.value("end").toDouble(), 6.0);
+        QCOMPARE(chapter.value("fileName").toString(), QString("Caption fixture - 02 Second chapter.wav"));
+        QVERIFY(chapter.value("folder").toUrl().isLocalFile());
+        // Captions are hidden, yet the active cue still defines the chunk.
+        auto chunk = player.chunkExportRange();
+        QCOMPARE(chunk.value("start").toDouble(), 3.0);
+        QCOMPARE(chunk.value("end").toDouble(), 5.5);
+        QCOMPARE(chunk.value("fileName").toString(), QString("Caption fixture - 0-00-03.000.wav"));
+        player.seek(2);
+        QVERIFY(player.chunkExportRange().value("gap").toBool());
+        QVERIFY(player.chunkExportAvailable());
+
+        QSignalSpy finished(&player, &PlayerController::exportFinished);
+        const QString target = directory.filePath("out");
+        QVERIFY(player.exportAudio(chunk, QUrl::fromLocalFile(target)));
+        QVERIFY(player.exporting());
+        QVERIFY(!player.exportAudio(chunk, QUrl::fromLocalFile(target)));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QVERIFY2(finished[0][0].toString().isEmpty(), qPrintable(finished[0][0].toString()));
+        QVERIFY(!player.exporting());
+        QVERIFY(QFileInfo(target + ".wav").size() > 44);
+        QCOMPARE(player.chapterExportRange().value("folder").toUrl(), QUrl::fromLocalFile(directory.path()));
+
+        QVERIFY(player.exportAudio(chunk, QUrl::fromLocalFile(directory.filePath("missing/x.wav"))));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, 10000);
+        QVERIFY(!finished[1][0].toString().isEmpty());
+    }
+    void bookInfoLoadsForTheCurrentBook()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        player.openBook(fixture("captions"));
+        QTRY_VERIFY_WITH_TIMEOUT(player.loaded() && player.captionsAvailable(), 10000);
+        QCOMPARE(player.captionStream(), 1);
+        player.loadBookInfo();
+        QVERIFY(player.bookInfoLoading());
+        QTRY_VERIFY_WITH_TIMEOUT(!player.bookInfoLoading(), 10000);
+        QCOMPARE(player.bookInfo().value("fileName").toString(), QString("captions.m4b"));
+        player.loadBookInfo();
+        player.openBook(fixture("no-captions"));
+        QVERIFY(!player.bookInfoLoading());
+        QVERIFY(player.bookInfo().isEmpty());
+        QTest::qWait(200);
+        QVERIFY(player.bookInfo().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(player.loaded() && !player.indexingCaptions(), 10000);
+        QCOMPARE(player.captionStream(), -1);
+        QVERIFY(!player.chunkExportAvailable());
     }
     void realPausedSeekingAndTransport()
     {

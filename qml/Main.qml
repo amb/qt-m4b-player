@@ -13,6 +13,8 @@ ApplicationWindow {
     readonly property bool wideControls: width >= 740
     readonly property var playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
     readonly property bool utilityPopupOpen: chapterSheet.visible || ratingPopup.visible || speedPopup.visible || volumePopup.visible
+    // Separate windows and utility popups own the keyboard; transport keys must not reach playback.
+    readonly property bool transportBlocked: notesEditor.visible || bookInfoWindow.visible || utilityPopupOpen
     property url popupBookUrl
     // Follow the platform colour scheme; the application ships no palette of its own.
     color: palette.window
@@ -23,10 +25,16 @@ ApplicationWindow {
     // C++ restores the saved size/state before showing the window.
     visible: false
     title: window.player.loaded ? window.player.title + (window.player.author ? " — " + window.player.author : "") : "qt-m4b-player"
-    onClosing: { notesEditor.close(); equalizerWindow.close() }
+    onClosing: { notesEditor.close(); bookInfoWindow.close(); equalizerWindow.close() }
 
     NotesEditor {
         id: notesEditor
+        player: window.player
+        transientParent: window
+        palette: window.palette
+    }
+    BookInfoWindow {
+        id: bookInfoWindow
         player: window.player
         transientParent: window
         palette: window.palette
@@ -59,7 +67,28 @@ ApplicationWindow {
         function onStateChanged() {
             if (window.utilityPopupOpen && window.popupBookUrl !== window.player.fileUrl)
                 window.closeUtilityPopups(null)
+            if (bookInfoWindow.visible && bookInfoWindow.bookUrl !== window.player.fileUrl)
+                bookInfoWindow.close()
         }
+        function onExportFinished(error: string) {
+            if (error.length > 0)
+                window.showAlert("Unable to Export Audio", error)
+        }
+    }
+    function showAlert(title: string, message: string): void {
+        alertDialog.title = title
+        alertDialog.message = message
+        alertDialog.open()
+    }
+    // The range is captured before the save dialog opens, so later playback,
+    // seeks or book changes do not change what is exported.
+    function beginExport(range: var): void {
+        if (!range.path) return
+        window.closeUtilityPopups(null)
+        exportDialog.range = range
+        exportDialog.currentFolder = range.folder
+        exportDialog.selectedFile = range.folder + "/" + encodeURIComponent(range.fileName)
+        exportDialog.open()
     }
 
     FileDialog {
@@ -67,6 +96,16 @@ ApplicationWindow {
         title: "Open audiobook"
         nameFilters: ["Audiobooks (*.m4b *.m4a *.mp4)", "All files (*)"]
         onAccepted: window.player.openBook(selectedFile)
+    }
+    FileDialog {
+        id: exportDialog
+        objectName: "exportDialog"
+        property var range: ({})
+        title: "Export Audio as WAV"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "wav"
+        nameFilters: ["WAV audio (*.wav)"]
+        onAccepted: window.player.exportAudio(range, selectedFile)
     }
     Action {
         id: openAction
@@ -78,42 +117,42 @@ ApplicationWindow {
         id: playAction
         text: window.player.playing ? "&Pause" : "&Play"
         shortcut: "Space"
-        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen
+        enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.togglePlayback()
     }
     Action {
         id: stopAction
         text: "&Stop and Return to Chapter Start"
         shortcut: "Ctrl+S"
-        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen
+        enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.stop()
     }
     Action {
         id: previousAction
         text: "&Previous Chapter"
         shortcut: "Ctrl+Left"
-        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen && window.player.currentChapter > 0
+        enabled: window.player.loaded && !window.transportBlocked && window.player.currentChapter > 0
         onTriggered: window.player.navigateChapter(-1)
     }
     Action {
         id: nextAction
         text: "&Next Chapter"
         shortcut: "Ctrl+Right"
-        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen && window.player.currentChapter + 1 < window.player.chapters.length
+        enabled: window.player.loaded && !window.transportBlocked && window.player.currentChapter + 1 < window.player.chapters.length
         onTriggered: window.player.navigateChapter(1)
     }
     Action {
         id: backAction
         text: "&Back 10 Seconds"
         shortcut: "Left"
-        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen
+        enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.skip(-10)
     }
     Action {
         id: forwardAction
         text: "&Forward 10 Seconds"
         shortcut: "Right"
-        enabled: window.player.loaded && !notesEditor.visible && !window.utilityPopupOpen
+        enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.skip(10)
     }
     Action {
@@ -150,10 +189,36 @@ ApplicationWindow {
         text: "&Notes…"
         // The popup owns this shortcut while open; avoid registering it twice.
         shortcut: ratingPopup.visible ? "" : "Ctrl+N"
-        enabled: window.player.notesAvailable
+        enabled: window.player.notesAvailable && !bookInfoWindow.visible
         onTriggered: {
             window.closeUtilityPopups(null)
             notesEditor.openDocument(window.player.notesForEditing())
+        }
+    }
+    Action {
+        id: infoAction
+        text: "Audiobook &Info…"
+        shortcut: "Ctrl+I"
+        enabled: window.player.loaded && !notesEditor.visible
+        onTriggered: { window.closeUtilityPopups(null); bookInfoWindow.openInfo() }
+    }
+    Action {
+        id: exportChapterAction
+        text: "Export Current &Chapter as WAV…"
+        enabled: window.player.chapterExportAvailable && !window.player.exporting && !window.transportBlocked
+        onTriggered: window.beginExport(window.player.chapterExportRange())
+    }
+    Action {
+        id: exportChunkAction
+        text: "Export Current Caption C&hunk as WAV…"
+        enabled: window.player.chunkExportAvailable && !window.player.exporting && !window.transportBlocked
+        onTriggered: {
+            const range = window.player.chunkExportRange()
+            if (range.gap)
+                window.showAlert("No Chunk at Current Position",
+                                 "The current playback position is in a gap between subtitle chunks.")
+            else
+                window.beginExport(range)
         }
     }
     Action {
@@ -193,10 +258,13 @@ ApplicationWindow {
         }
     }
 
+    // Menus group commands by what they act on, and each command appears once:
+    // File = the book and its files; Playback = position, chapters, speed and
+    // sound; View = what is shown; Help. Appearance settings live in one dialog.
     menuBar: MenuBar {
         Menu {
             title: "&File"
-            width: Math.min(window.width - 16, 320)
+            width: Math.min(window.width - 16, 380)
             MenuCommand { action: openAction; keyHint: "Ctrl+O" }
             Menu {
                 id: recentMenu
@@ -215,8 +283,17 @@ ApplicationWindow {
                 }
             }
             MenuSeparator {}
+            MenuCommand { action: infoAction }
             MenuCommand { action: notesAction }
-            MenuCommand { action: appearanceAction }
+            MenuSeparator {}
+            MenuCommand { action: exportChapterAction }
+            MenuCommand { action: exportChunkAction }
+            MenuItem {
+                text: "Exporting Audio…"
+                enabled: false
+                visible: window.player.exporting
+                height: visible ? implicitHeight : 0
+            }
             MenuSeparator {}
             MenuCommand {
                 keyHint: "Ctrl+Q"
@@ -233,12 +310,13 @@ ApplicationWindow {
             MenuCommand { action: playAction }
             MenuCommand { action: stopAction }
             MenuSeparator {}
+            MenuCommand { action: backAction }
+            MenuCommand { action: forwardAction }
+            MenuSeparator {}
             MenuCommand { action: previousAction }
             MenuCommand { action: nextAction }
             MenuCommand { action: chaptersAction }
-            MenuSeparator {}
-            MenuCommand { action: backAction }
-            MenuCommand { action: forwardAction }
+            MenuCommand { action: stopAfterAction }
             MenuSeparator {}
             Menu {
                 title: "Playback &Speed"
@@ -254,14 +332,12 @@ ApplicationWindow {
                     }
                 }
             }
-            MenuCommand { action: stopAfterAction }
             MenuSeparator {}
             MenuCommand { action: volumeAction }
-            MenuCommand { action: equalizerAction }
             MenuCommand {
                 action: Action {
                     text: "&Increase Volume"
-                    enabled: !notesEditor.visible && !window.utilityPopupOpen
+                    enabled: !window.transportBlocked
                     shortcut: "Ctrl+Up"
                     onTriggered: window.player.setVolume(Math.min(100, window.player.volume + 5))
                 }
@@ -269,34 +345,20 @@ ApplicationWindow {
             MenuCommand {
                 action: Action {
                     text: "&Decrease Volume"
-                    enabled: !notesEditor.visible && !window.utilityPopupOpen
+                    enabled: !window.transportBlocked
                     shortcut: "Ctrl+Down"
                     onTriggered: window.player.setVolume(Math.max(0, window.player.volume - 5))
                 }
             }
+            MenuCommand { action: equalizerAction }
         }
         Menu {
             title: "&View"
             width: Math.min(window.width - 16, 300)
             MenuCommand { action: captionsAction }
-            Menu {
-                id: captionSizeMenu
-                title: "Caption &Text Size"
-                Repeater {
-                    model: [18, 22, 26, 30, 34, 38, 42]
-                    MenuItem {
-                        required property int modelData
-                        text: modelData + " px"
-                        checkable: true
-                        checked: window.preferences.captionSize === modelData
-                        onTriggered: window.preferences.captionSize = modelData
-                    }
-                }
-            }
-            MenuCommand { action: fillCoverAction }
-            MenuCommand { action: appearanceAction }
-            MenuSeparator {}
             MenuCommand { action: fullScreenAction }
+            MenuSeparator {}
+            MenuCommand { action: appearanceAction }
         }
         Menu {
             title: "&Help"
@@ -725,9 +787,16 @@ ApplicationWindow {
         anchors.centerIn: Overlay.overlay
         width: Math.min(window.width - 32, 440)
         message: "Open a book with File → Open Audiobook or Open Recent. Books open paused and remember your position.\n\n"
-            + "Space: Play / pause\nLeft / Right: Back / forward 10 seconds\nCtrl+Left / Right: Previous / next chapter\nCtrl+J: Chapters\nCtrl+N: Notes\nCtrl+E: EQ\nCtrl+S: Stop (Save while editing notes)\nCtrl+Up / Down: Volume + / − 5%\nCtrl+Shift+C: Toggle captions\nCtrl+,: Appearance\nF11: Full screen\n\n"
+            + "Space: Play / pause\nLeft / Right: Back / forward 10 seconds\nCtrl+Left / Right: Previous / next chapter\nCtrl+J: Chapters\nCtrl+I: Audiobook info\nCtrl+N: Notes\nCtrl+E: EQ\nCtrl+S: Stop (Save while editing notes)\nCtrl+Up / Down: Volume + / − 5%\nCtrl+Shift+C: Toggle captions\nCtrl+,: Appearance\nF11: Full screen\n\n"
             + "Notes use explicit Save/Cancel; an empty note clears it. EQ starts bypassed and applies across books for this session. Tone runs from warm to clear; Hz changes its balance point. Boost adds up to 24 dB with peak limiting; higher settings reduce dynamics. Reset restores neutral tone, 1000 Hz and zero Boost without changing bypass. Automatic headroom makes room for boosted frequencies.\n\n"
-            + "Use Playback for speed and Stop After Chapter. Enable embedded captions in View once indexing finishes. In Fill mode, drag vertically on the cover to reframe it."
+            + "File has book details, notes and WAV export. Export Current Chapter saves the whole chapter at the playhead; Export Current Caption Chunk saves the active caption's audio, even with captions hidden. Exports are 16-bit WAV at the original sample rate, without speed, volume or EQ.\n\n"
+            + "Playback has transport, chapters, speed, Stop After Chapter, volume and EQ. View toggles captions once indexing finishes, full screen and Appearance (cover fill and caption size). In Fill mode, drag vertically on the cover to reframe it."
+    }
+    InfoPopup {
+        id: alertDialog
+        objectName: "alertDialog"
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(window.width - 32, 400)
     }
     InfoPopup {
         id: aboutDialog

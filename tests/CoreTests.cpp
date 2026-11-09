@@ -1,6 +1,8 @@
 #include "Library.h"
 #include "MediaData.h"
 #include "MetadataReader.h"
+#include "AudioExporter.h"
+#include "AudiobookInfo.h"
 #include <QDir>
 #include <QFile>
 #include <QSqlDatabase>
@@ -148,6 +150,86 @@ private slots:
         QVERIFY(captionAt(book.captions, 5.5) == nullptr);
         QCOMPARE(chapterAt(book.chapters, 2.999), 0);
         QCOMPARE(chapterAt(book.chapters, 3), 1);
+    }
+    void exportsChapterRangeAsPcmWav()
+    {
+        QTemporaryDir directory;
+        const QString target = directory.filePath("chapter.wav");
+        const auto cancel = std::make_shared<std::atomic_bool>(false);
+        const auto result = AudioExporter::writeWav(QString(FIXTURE_DIR) + "/captions.m4b", 3, 6, target, cancel);
+        QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
+        QVERIFY(!result.cancelled);
+        QCOMPARE(result.sampleRate, 22050);
+        QCOMPARE(result.channels, 1);
+        // Three seconds of source audio at the source rate, within one decoded frame.
+        QVERIFY2(std::abs(qint64(result.frames) - 3 * 22050) <= 1024, qPrintable(QString::number(result.frames)));
+        QFile file(target);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        QCOMPARE(bytes.size(), qsizetype(44 + result.frames * 2));
+        const auto *data = reinterpret_cast<const uchar *>(bytes.constData());
+        QCOMPARE(bytes.left(4), QByteArray("RIFF"));
+        QCOMPARE(qFromLittleEndian<quint32>(data + 4), quint32(bytes.size() - 8));
+        QCOMPARE(bytes.mid(8, 8), QByteArray("WAVEfmt "));
+        QCOMPARE(qFromLittleEndian<quint16>(data + 20), quint16(1));
+        QCOMPARE(qFromLittleEndian<quint16>(data + 22), quint16(1));
+        QCOMPARE(qFromLittleEndian<quint32>(data + 24), quint32(22050));
+        QCOMPARE(qFromLittleEndian<quint32>(data + 28), quint32(22050 * 2));
+        QCOMPARE(qFromLittleEndian<quint16>(data + 34), quint16(16));
+        QCOMPARE(bytes.mid(36, 4), QByteArray("data"));
+        QCOMPARE(qFromLittleEndian<quint32>(data + 40), quint32(result.frames * 2));
+    }
+    void failedOrCancelledExportPreservesDestination()
+    {
+        QTemporaryDir directory;
+        const QString target = directory.filePath("existing.wav");
+        {
+            QFile file(target);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("keep me");
+        }
+        const auto cancel = std::make_shared<std::atomic_bool>(false);
+        auto result = AudioExporter::writeWav(directory.filePath("missing.m4b"), 0, 1, target, cancel);
+        QVERIFY(!result.error.isEmpty());
+        cancel->store(true);
+        result = AudioExporter::writeWav(QString(FIXTURE_DIR) + "/captions.m4b", 0, 1, target, cancel);
+        QVERIFY(result.cancelled);
+        QFile file(target);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), QByteArray("keep me"));
+        QCOMPARE(QDir(directory.path()).entryList(QDir::Files), QStringList{"existing.wav"});
+        result = AudioExporter::writeWav(QString(FIXTURE_DIR) + "/captions.m4b", 0, 1,
+            directory.filePath("no-such-folder/out.wav"), std::make_shared<std::atomic_bool>(false));
+        QVERIFY(!result.error.isEmpty());
+    }
+    void exportFileNamesAreSafe()
+    {
+        QCOMPARE(AudioExporter::safeFileName(QStringLiteral("A/B: C*? \\ \"<x>|\x01")), QString("A_B_ C__ _ __x___"));
+        QCOMPARE(AudioExporter::safeFileName("..hidden"), QString("hidden"));
+        QCOMPARE(AudioExporter::safeFileName("  "), QString("Audiobook"));
+    }
+    void audiobookInfoListsFileAndTracks()
+    {
+        const auto cancel = std::make_shared<std::atomic_bool>(false);
+        const auto info = AudiobookInfo::read(QString(FIXTURE_DIR) + "/captions.m4b", cancel);
+        QVERIFY(info.value("fileError").toString().isEmpty());
+        QVERIFY(info.value("trackError").toString().isEmpty());
+        QCOMPARE(info.value("fileName").toString(), QString("captions.m4b"));
+        QVERIFY(info.value("size").toString().contains("bytes"));
+        const auto audio = info.value("audioTracks").toList();
+        QCOMPARE(audio.size(), 1);
+        QVERIFY(audio[0].toMap().value("codec").toString().contains("aac"));
+        QCOMPARE(audio[0].toMap().value("channels").toString(), QString("1 (Mono)"));
+        QVERIFY(audio[0].toMap().value("sampleRate").toString().contains("kHz"));
+        const auto subtitles = info.value("subtitleTracks").toList();
+        QCOMPARE(subtitles.size(), 1);
+        QCOMPARE(subtitles[0].toMap().value("index").toInt(), 1);
+        QVERIFY(subtitles[0].toMap().value("format").toString().contains("mov_text"));
+        const auto book = MetadataReader::read(QString(FIXTURE_DIR) + "/captions.m4b", cancel, true);
+        QCOMPARE(book.captionStream, 1);
+        const auto missing = AudiobookInfo::read(QString(FIXTURE_DIR) + "/missing.m4b", cancel);
+        QVERIFY(!missing.value("fileError").toString().isEmpty());
+        QVERIFY(!missing.value("trackError").toString().isEmpty());
     }
     void chapterTextIsNotACaption()
     {

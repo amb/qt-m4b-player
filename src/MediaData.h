@@ -29,6 +29,8 @@ struct MediaData {
     QVector<Chapter> chapters;
     QByteArray cover;
     QVector<CaptionCue> captions;
+    // Container stream index of the selected mov_text track, or -1.
+    int captionStream = -1;
     QString error;
 };
 

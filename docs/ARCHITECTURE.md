@@ -7,6 +7,10 @@
 | `MpvEngine` | One audio player; local load, exact seek requests, pause, rate, volume and engine observations. No app-specific chapter policies. |
 | `PlayerController` | One listening session, transport policies, load generation, identity, saved resume, chapters, caption timeline and current cue. |
 | `MetadataReader` | FFmpeg container inspection and caption indexing on QtConcurrent workers. No live session or database access. |
+| `AudiobookInfo` | Read-only, display-formatted file and track details for the Info window, on a worker. |
+| `AudioDecode` | Shared FFmpeg decode of an exact book-time range of the audio track, used by loudness measurement and export. |
+| `AudioExporter` | 16-bit PCM WAV export of a captured range through `QSaveFile`. |
+| `DesktopIntegration` | Clipboard and `org.freedesktop.FileManager1` file reveal, falling back to opening the folder. |
 | `Library` | Qt SQL / SQLite connection, prepared field-specific writes, atomic book/location progress commits and schema version. |
 | `WindowPreferences` | Restore desktop window size/maximized state before showing it; save normal size separately from fullscreen/maximized dimensions in QSettings. |
 | `AppPreferences` | Global caption text size and cover fill mode, exposed to QML and saved on change in the same QSettings file as window preferences. |
@@ -66,6 +70,30 @@ the same way, consumes the outside click, and restores trigger focus unless a
 separate Notes/EQ window is active. Transport shortcuts are suppressed for every
 utility popup, so list/slider keyboard actions cannot seek or pause the book.
 
+## Audiobook Info and WAV export
+
+`PlayerController::loadBookInfo` runs `AudiobookInfo` for the current path on a
+worker. Its completion checks the load generation and its own cancellation flag;
+opening another book clears the details and the window closes. The Book section
+binds the live session. The subtitle that supplies captions is identified by
+the container stream index that `MetadataReader` selected, and only once indexing
+produced non-empty cues.
+
+Export ranges are captured by `chapterExportRange` (the chapter at the playhead,
+ending no later than the book) or `chunkExportRange` (the active cue from the
+caption timeline regardless of CC visibility; `gap` outside a cue or at book end).
+The QML save dialog receives a sanitized filename and the session's last export
+folder. `exportAudio` decodes on a worker through `AudioDecode::decodeRange`, the
+same sample-exact trimming that loudness measurement uses, and converts each
+sample format to little-endian 16-bit PCM without resampling or channel mixing.
+`QSaveFile` writes beside the destination and renames only after the header is
+final, so failure or cancellation never replaces an existing file. One export runs
+at a time; it is independent of later seeks and book changes, and shutdown
+cancels it. WAV's 32-bit sizes limit one export to about 4 GiB of PCM.
+
+Flatpak needs `--talk-name=org.freedesktop.FileManager1` for Show in File Manager;
+otherwise the folder opens through the desktop portal.
+
 ## EQ, Boost and loudness
 
 EQ settings belong to the playback session and survive book replacement. The
@@ -84,7 +112,7 @@ the existing tone-only pipeline; neutral tone with zero Boost and bypass remove
 all EQ filters. Reset clears Boost and tone, restores 1,000 Hz, and retains bypass.
 Volume stays independent and limited to 100 percent.
 
-`LoudnessReader` decodes only the current chapter on a cancellable worker, trims
+`LoudnessReader` decodes only the current chapter on a cancellable worker (through `AudioDecode`), trims
 decoded frames to its exact boundaries, applies the current tone/headroom at
 48 kHz, and measures gated BS.1770/EBU R128 integrated loudness through libavfilter.
 The chapter must be longer than 60 seconds, and more than 60 seconds of decoded
@@ -127,7 +155,9 @@ no shader/effects package. Fit mode uses an opaque palette background.
   every 30 seconds of advancing playback. Seeks are coalesced and saved once,
   one second after the last; a newly opened book is recorded immediately.
 - Keep the reference UI's narrow/wide responsive layouts and its full menu bar
-  when adding or rearranging controls.
+  when adding or rearranging controls. Each command belongs to one menu: File
+  (book and files), Playback (transport, chapters, speed, sound), View (display),
+  Help. Appearance settings live only in the Appearance dialog.
 
 The database schema, migrations and storage locations are described in
 [storage](STORAGE.md).

@@ -18,6 +18,8 @@ finish-args:
   # The player opens arbitrary local paths and remembers them across launches.
   # Add e.g. --filesystem=/mnt/nas with `flatpak override` for other mounts.
   - --filesystem=home
+  # Audiobook Info → Show in File Manager selects the book in the file manager.
+  - --talk-name=org.freedesktop.FileManager1
 
 # The runtime FFmpeg already provides the AAC decoder, the mov/mp4 demuxer and
 # the mov_text decoder this app needs. No ffmpeg-full extension is declared: it

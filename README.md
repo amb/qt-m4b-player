@@ -24,6 +24,10 @@ project has its own source, database and build setup.
   available from the star popup.
 - **Embedded captions:** timed `mov_text` captions with automatic overflow
   scrolling and adjustable text size.
+- **Audiobook Info:** read-only file, audio-track and subtitle details, with
+  Copy Path and Show in File Manager.
+- **WAV export:** save the current chapter or the current caption chunk as
+  16-bit PCM WAV, in the background.
 - **Desktop interface:** system colour scheme, saved window size, cover art
   and a blurred transport background in Fill mode, including with software rendering.
 
@@ -75,7 +79,11 @@ File → Open Audiobook uses the desktop's native file selector when Qt's platfo
 integration provides one, including KDE's selector on Plasma. Otherwise, Qt
 shows its built-in file dialog.
 
-The menu bar and lower transport controls provide the playback actions.
+The menu bar and lower transport controls provide the playback actions. Each
+command appears in one menu: **File** for the book and its files (Open, Recent,
+Info, Notes, WAV export, Quit), **Playback** for transport, chapters, speed,
+Stop After Chapter, volume and EQ, **View** for captions, full screen and
+Appearance, and **Help**.
 **Help → Player Help** lists the shortcuts.
 
 | Shortcut | Action |
@@ -86,6 +94,7 @@ The menu bar and lower transport controls provide the playback actions.
 | Ctrl+Left / Ctrl+Right | Previous / next chapter |
 | Ctrl+S | Stop and return to the chapter start |
 | Ctrl+J | Open the chapter list |
+| Ctrl+I | Open Audiobook Info |
 | Ctrl+Shift+C | Toggle captions once indexed |
 | Ctrl+N | Open Notes |
 | Ctrl+E | Open EQ |
@@ -149,6 +158,35 @@ sets a fixed Boost amount. It is available for chapters longer than one minute.
 This applies a fixed correction rather than adjusting sentence-to-sentence
 volume. It changes neither the audiobook file nor the main volume setting.
 
+### Audiobook Info
+
+**File → Audiobook Info…** or Ctrl+I opens a read-only inspector for the loaded
+book. It shows the title, author, duration and chapter count; the file's
+name, location, kind, size and dates; each audio track's codec, average
+bitrate, sample rate and channels; and the embedded subtitle tracks, including
+which one supplies captions. File and track details load in the background.
+
+- **Copy Path** copies the full file path.
+- **Show in File Manager** asks the desktop file manager to select the file,
+  or opens its folder if no file manager answers.
+- Done, Return or Escape closes it. Info and Notes cannot be open together, and
+  Info closes when another book is opened.
+
+### Export audio as WAV
+
+- **File → Export Current Chapter as WAV…** saves the whole chapter that contains
+  the playhead, including audio before the playhead.
+- **File → Export Current Caption Chunk as WAV…** saves the audio of the active
+  embedded caption. It works with CC off. In a gap between captions, it says so
+  instead of opening the save dialog.
+
+The range is captured when you choose the command; later seeks or book changes
+do not alter it. The file is 16-bit PCM WAV at the book's sample rate and channel
+count, at normal speed and without volume or EQ. Export runs in the background
+while **Exporting Audio…** shows in the File menu. A failed export reports the
+error and leaves any existing file unchanged. The save dialog starts in the
+last export folder of the session, otherwise in Music.
+
 ### Captions, artwork and appearance
 
 - **Captions:** CC becomes available after a usable timed track has been indexed.
@@ -158,8 +196,8 @@ volume. It changes neither the audiobook file nor the main volume setting.
   book and is not saved across launches. Dragging does not toggle playback.
 - **Layout:** controls use one row in wide windows and two in narrow windows.
   Chapter and time information sits above the seek bar, wrapping when needed.
-- **Preferences:** caption text size and Fill cover background save immediately
-  when changed through View or Appearance.
+- **Preferences:** caption text size and Fill cover background are set in
+  **View → Appearance** (Ctrl+,) and save immediately.
 - **Window:** normal size and maximized state are saved between launches.
   The desktop controls window placement, including on KDE Wayland.
 

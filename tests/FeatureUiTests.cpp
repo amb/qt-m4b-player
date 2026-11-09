@@ -180,6 +180,50 @@ private slots:
         QCOMPARE(list->property("currentIndex").toInt(), 1);
         player.togglePlayback();
     }
+    void bookInfoWindowShowsDetailsAndExcludesNotes()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        AppPreferences preferences(directory.filePath("settings.ini"));
+        player.openLocalPath(QString(SOURCE_DIR) + "/tests/fixtures/captions.m4b");
+        QTRY_VERIFY(player.notesAvailable() && player.captionsAvailable());
+        QQmlEngine engine;
+        engine.addImageProvider("transport", new TransportIconProvider);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString(SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"player", QVariant::fromValue(&player)}, {"preferences", QVariant::fromValue(&preferences)}}));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        window->show(); window->requestActivate();
+        QTest::qWait(100);
+        auto *info = root->findChild<QQuickWindow *>("bookInfoWindow");
+        auto *notes = root->findChild<QQuickWindow *>("notesEditor");
+        QVERIFY(info && notes);
+        QTest::keyClick(window, Qt::Key_I, Qt::ControlModifier);
+        QTRY_VERIFY(info->isVisible());
+        QTRY_VERIFY(!player.bookInfoLoading());
+        auto *path = info->findChild<QObject *>("infoPath");
+        QVERIFY(path);
+        QTRY_COMPARE(path->property("value").toString(), QString(SOURCE_DIR) + "/tests/fixtures/captions.m4b");
+        // Notes cannot open over Info, and transport keys do not reach playback.
+        QVERIFY(root->property("transportBlocked").toBool());
+        QTest::keyClick(info, Qt::Key_N, Qt::ControlModifier);
+        QTest::qWait(50);
+        QVERIFY(!notes->isVisible());
+        const QString snapshots = qEnvironmentVariable("QT_M4B_UI_SNAPSHOTS");
+        if (!snapshots.isEmpty()) {
+            info->resize(560, 1250); // show every section in one image
+            QTest::qWait(100);
+            QVERIFY(QDir().mkpath(snapshots));
+            QVERIFY(info->grabWindow().save(snapshots + "/bookInfoWindow.png"));
+        }
+        QTest::keyClick(info, Qt::Key_Escape);
+        QTRY_VERIFY(!info->isVisible());
+        QVERIFY(!notes->isVisible());
+        QVERIFY(!root->property("transportBlocked").toBool());
+    }
     void notesKeyboardCancelSaveAndFailureKeepDraft()
     {
         QTemporaryDir directory;
