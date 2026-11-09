@@ -283,6 +283,12 @@ private slots:
         auto *slider = settings->findChild<QObject *>("captionTransparency");
         QVERIFY(slider);
         QCOMPARE(slider->property("value").toDouble(), 35.0);
+        // Captions are drawn at their final size from glyph curves, at the preference's size.
+        auto *caption = root->findChild<QObject *>("captionText");
+        QVERIFY(caption);
+        QCOMPARE(caption->property("renderType").toInt(), 2); // Text.CurveRendering
+        preferences.setCaptionSize(40);
+        QCOMPARE(caption->property("font").value<QFont>().pixelSize(), 40);
         auto *header = root->findChild<QObject *>("chapterReadout");
         QVERIFY(header);
         QCOMPARE(header->property("font").value<QFont>().pixelSize(), 20);

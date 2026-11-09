@@ -514,6 +514,7 @@ ApplicationWindow {
                 clip: true
                 Text {
                     id: caption
+                    objectName: "captionText"
                     width: parent.width
                     y: -Math.max(0, implicitHeight - captionViewport.height) * window.player.captionScroll
                     text: window.player.captionText
@@ -524,6 +525,14 @@ ApplicationWindow {
                     style: Text.Outline
                     styleColor: "#000000"
                     font.pixelSize: window.preferences.captionSize
+                    // The default renderer draws glyphs from distance fields made at a
+                    // fixed base size and scaled, which softens large caption text and
+                    // makes the outline uneven. Curve rendering (Qt 6.7+) draws each
+                    // glyph's outline at its final size; older Qt keeps the default.
+                    // Sizes stay in logical pixels: on Wayland, Screen.devicePixelRatio
+                    // reports the output's integer scale (2 at 125%), not the window's
+                    // fractional 1.25, so converting to screen pixels in QML is wrong.
+                    renderType: Text.CurveRendering !== undefined ? Text.CurveRendering : Text.QtRendering
                     Accessible.role: Accessible.StaticText
                     Accessible.name: text
                 }
