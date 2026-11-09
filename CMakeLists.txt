@@ -62,7 +62,7 @@ add_custom_target(player-build-info
 add_dependencies(qt-m4b-player player-build-info)
 target_include_directories(qt-m4b-player PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(PLAYER_QML_FILES qml/Main.qml qml/TransportButton.qml qml/TransportIcon.qml qml/MenuCommand.qml
-    qml/CoverArtwork.qml qml/ProgressHeader.qml qml/InfoPopup.qml qml/NotesEditor.qml qml/EqualizerWindow.qml qml/StarIcon.qml qml/TransportPopup.qml qml/BookInfoWindow.qml qml/SettingsWindow.qml)
+    qml/CoverArtwork.qml qml/ProgressHeader.qml qml/InfoPopup.qml qml/NotesEditor.qml qml/EqualizerWindow.qml qml/StarIcon.qml qml/TransportPopup.qml qml/BookInfoWindow.qml qml/SettingsWindow.qml qml/HelpWindow.qml)
 qt_add_qml_module(qt-m4b-player
     URI AudiobookPlayer
     VERSION 1.0

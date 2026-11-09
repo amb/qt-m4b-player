@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFont>
 #include <QtTest>
+#include <functional>
 #include <memory>
 
 class FeatureUiTests : public QObject {
@@ -348,6 +349,56 @@ private slots:
         QTRY_VERIFY(!fileMenu->property("visible").toBool());
         QCOMPARE(player.currentChapter(), 0);
         QVERIFY(!player.playing());
+    }
+    void helpWindowShowsShortcutTables()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        AppPreferences preferences(directory.filePath("settings.ini"));
+        QQmlEngine engine;
+        engine.addImageProvider("transport", new TransportIconProvider);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString(SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"player", QVariant::fromValue(&player)}, {"preferences", QVariant::fromValue(&preferences)}}));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        window->show(); window->requestActivate();
+        QTest::qWait(100);
+        auto *help = root->findChild<QQuickWindow *>("helpWindow");
+        QVERIFY(help);
+        QTest::keyClick(window, Qt::Key_H, Qt::ControlModifier | Qt::ShiftModifier);
+        QTRY_VERIFY(help->isVisible());
+        // Repeater delegates are reachable through the item tree, not QObject children.
+        QList<QQuickItem *> tables;
+        std::function<void(QQuickItem *)> collect = [&](QQuickItem *item) {
+            if (item->objectName() == "shortcutTable") tables.append(item);
+            for (auto *child : item->childItems()) collect(child);
+        };
+        collect(help->contentItem());
+        QCOMPARE(tables.size(), 2);
+        int rows = 0;
+        for (auto *table : tables) {
+            QVERIFY(table->height() > 0);
+            for (auto *child : table->childItems())
+                rows += child->height() > 0;
+        }
+        QCOMPARE(rows, help->property("shortcutGroups").toList().value(0).toMap().value("rows").toList().size()
+                     + help->property("shortcutGroups").toList().value(1).toMap().value("rows").toList().size());
+        const QString snapshots = qEnvironmentVariable("QT_M4B_UI_SNAPSHOTS");
+        if (!snapshots.isEmpty()) {
+            help->resize(600, 1500); // the whole reference in one image
+            QTest::qWait(100);
+            QVERIFY(QDir().mkpath(snapshots));
+            QVERIFY(help->grabWindow().save(snapshots + "/helpWindow.png"));
+        }
+        QTest::keyClick(help, Qt::Key_Escape);
+        QTRY_VERIFY(!help->isVisible());
+        window->requestActivate();
+        QTest::qWait(50);
+        QTest::keyClick(window, Qt::Key_F1);
+        QTRY_VERIFY(help->isVisible());
     }
     void notesKeyboardCancelSaveAndFailureKeepDraft()
     {

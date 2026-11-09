@@ -32,8 +32,13 @@ ApplicationWindow {
     // C++ restores the saved size/state before showing the window.
     visible: false
     title: window.player.loaded ? window.player.title + (window.player.author ? " — " + window.player.author : "") : "qt-m4b-player"
-    onClosing: { notesEditor.close(); bookInfoWindow.close(); settingsWindow.close(); equalizerWindow.close() }
+    onClosing: { notesEditor.close(); bookInfoWindow.close(); settingsWindow.close(); helpWindow.close(); equalizerWindow.close() }
 
+    HelpWindow {
+        id: helpWindow
+        transientParent: window
+        palette: window.palette
+    }
     SettingsWindow {
         id: settingsWindow
         preferences: window.preferences
@@ -399,7 +404,7 @@ ApplicationWindow {
                 action: Action {
                     text: "Player &Help"
                     shortcut: "Ctrl+Shift+H"
-                    onTriggered: helpDialog.open()
+                    onTriggered: helpWindow.openHelp()
                 }
             }
             MenuItem { text: "&About qt-m4b-player"; onTriggered: aboutDialog.open() }
@@ -794,18 +799,7 @@ ApplicationWindow {
         }
     }
     // F1 is the usual Linux help key; Ctrl+Shift+H matches the macOS app.
-    Shortcut { sequence: "F1"; onActivated: helpDialog.open() }
-    InfoPopup {
-        id: helpDialog
-        title: "Player Help"
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(window.width - 32, 440)
-        message: "Open a book with File → Open Audiobook or Open Recent. Books open paused and remember your position.\n\n"
-            + "Space: Play / pause\nEscape: Stop and return to the chapter start\nUp / Down: Previous / next chapter\nLeft / Right: Back / forward 10 seconds\nCtrl+Left / Right: Playback speed − / + 0.1×\nCtrl+Up / Down: Volume + / − 5%\nCtrl+J: Chapters\nCtrl+Shift+C: Toggle captions\nCtrl+I: Audiobook info\nCtrl+N: Notes (Ctrl+S saves)\nCtrl+E: EQ\nCtrl+,: Settings\nCtrl+W: Close window\nCtrl+Shift+H or F1: Help\nF11: Full screen\n\n"
-            + "Notes use explicit Save/Cancel; an empty note clears it. EQ starts bypassed and applies across books for this session. Tone runs from warm to clear; Hz changes its balance point. Boost adds up to 24 dB with peak limiting; higher settings reduce dynamics. Reset restores neutral tone, 1000 Hz and zero Boost without changing bypass. Automatic headroom makes room for boosted frequencies.\n\n"
-            + "File has book details, notes and WAV export. Export Current Chapter saves the whole chapter at the playhead; Export Current Caption Chunk saves the active caption's audio, even with captions hidden. Exports are 16-bit WAV at the original sample rate, without speed, volume or EQ.\n\n"
-            + "Playback has transport, chapters, speed, Stop After Chapter, volume and EQ. View toggles captions once indexing finishes and full screen. File → Settings holds launch resume, the Stop After Chapter default, cover display, text sizes and caption background. In Fill mode, drag vertically on the cover to reframe it."
-    }
+    Shortcut { sequence: "F1"; onActivated: helpWindow.openHelp() }
     InfoPopup {
         id: alertDialog
         objectName: "alertDialog"
