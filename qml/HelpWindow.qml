@@ -112,14 +112,21 @@ ApplicationWindow {
         }
     }
 
-    ScrollView {
+    ReadingScrollView {
         id: scroll
+        objectName: "helpScroll"
         anchors.fill: parent
         contentWidth: availableWidth
         contentHeight: content.implicitHeight + 56
         focus: true
-        Keys.onUpPressed: ScrollBar.vertical.decrease()
-        Keys.onDownPressed: ScrollBar.vertical.increase()
+        Keys.onUpPressed: scroll.scrollBy(-1)
+        Keys.onDownPressed: scroll.scrollBy(1)
+        Keys.onPressed: event => {
+            if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
+                scroll.scrollBy(event.key === Qt.Key_PageDown ? 8 : -8)
+                event.accepted = true
+            }
+        }
 
         ColumnLayout {
             id: content

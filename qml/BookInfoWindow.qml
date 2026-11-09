@@ -91,12 +91,11 @@ ApplicationWindow {
         anchors.margins: 20
         spacing: 12
         Label { text: "Audiobook Info"; font.pixelSize: 22; Accessible.role: Accessible.Heading }
-        ScrollView {
+        ReadingScrollView {
             id: scroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             contentWidth: availableWidth
-            clip: true
             ColumnLayout {
                 width: scroll.availableWidth
                 spacing: 8

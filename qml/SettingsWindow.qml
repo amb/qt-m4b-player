@@ -83,7 +83,7 @@ ApplicationWindow {
         }
     }
 
-    ScrollView {
+    ReadingScrollView {
         anchors.fill: parent
         contentWidth: availableWidth
         contentHeight: content.implicitHeight + 40

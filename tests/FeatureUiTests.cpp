@@ -386,7 +386,29 @@ private slots:
         }
         QCOMPARE(rows, help->property("shortcutGroups").toList().value(0).toMap().value("rows").toList().size()
                      + help->property("shortcutGroups").toList().value(1).toMap().value("rows").toList().size());
+        // The reference is longer than the window: the bar stays visible and a fade
+        // marks the bottom edge until the end is reached.
+        QQuickItem *scroll = nullptr, *fade = nullptr;
+        std::function<void(QQuickItem *)> find = [&](QQuickItem *item) {
+            if (item->objectName() == "helpScroll") scroll = item;
+            if (item->objectName() == "moreContentFade") fade = item;
+            for (auto *child : item->childItems()) find(child);
+        };
+        find(help->contentItem());
+        QVERIFY(scroll && fade);
+        QVERIFY(scroll->property("overflowing").toBool());
+        auto *bar = scroll->property("verticalBar").value<QQuickItem *>();
+        QVERIFY(bar);
+        QTRY_VERIFY(bar->isVisible() && bar->width() > 0 && bar->opacity() > 0.5);
+        QTRY_VERIFY(fade->isVisible());
         const QString snapshots = qEnvironmentVariable("QT_M4B_UI_SNAPSHOTS");
+        if (!snapshots.isEmpty()) {
+            QVERIFY(QDir().mkpath(snapshots));
+            QVERIFY(help->grabWindow().save(snapshots + "/helpWindowTop.png"));
+        }
+        QVERIFY(QMetaObject::invokeMethod(scroll, "scrollBy", Q_ARG(int, 1000)));
+        QTRY_VERIFY(scroll->property("atEnd").toBool());
+        QTRY_VERIFY(!fade->isVisible());
         if (!snapshots.isEmpty()) {
             help->resize(600, 1500); // the whole reference in one image
             QTest::qWait(100);
