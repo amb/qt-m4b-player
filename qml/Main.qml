@@ -22,6 +22,23 @@ ApplicationWindow {
     readonly property bool utilityPopupOpen: chapterSheet.visible || ratingPopup.visible || speedPopup.visible || volumePopup.visible
     // Separate windows and utility popups own the keyboard; transport keys must not reach playback.
     readonly property bool transportBlocked: notesEditor.visible || bookInfoWindow.visible || utilityPopupOpen
+    // Qt keeps a window's shortcuts live while one of its transient windows has
+    // focus. Single-key shortcuts and Ctrl+W are released then, so the focused
+    // EQ, Settings, Help, Info or Notes window gets Esc, Space, arrows and Ctrl+W
+    // itself (an identical shortcut in both windows is ambiguous and fires in
+    // neither). Ctrl shortcuts such as EQ or volume still reach the player.
+    // Transient windows report `active` while their parent is focused, so focus
+    // is detected from this window's own active focus item, which Qt clears when
+    // another window takes the keyboard.
+    // Menus and popups live in the overlay and handle these keys themselves too.
+    readonly property bool ownsKeyboard: activeFocusItem !== null && !inOverlay(activeFocusItem)
+    function inOverlay(item: Item): bool {
+        for (let current = item; current; current = current.parent)
+            if (current === contentItem.Overlay.overlay)
+                return true
+        return false
+    }
+    function playerKey(key: var): var { return ownsKeyboard ? key : "" }
     property url popupBookUrl
     // Follow the platform colour scheme; the application ships no palette of its own.
     color: palette.window
@@ -135,21 +152,21 @@ ApplicationWindow {
     Action {
         id: playAction
         text: window.player.playing ? "&Pause" : "&Play"
-        shortcut: "Space"
+        shortcut: window.playerKey("Space")
         enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.togglePlayback()
     }
     Action {
         id: stopAction
         text: "&Stop and Return to Chapter Start"
-        shortcut: "Escape"
+        shortcut: window.playerKey("Escape")
         enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.stop()
     }
     Action {
         id: previousAction
         text: "&Previous Chapter"
-        shortcut: "Up"
+        shortcut: window.playerKey("Up")
         // Stays enabled at the first chapter, where it pauses without moving.
         enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.navigateChapter(-1)
@@ -157,21 +174,21 @@ ApplicationWindow {
     Action {
         id: nextAction
         text: "&Next Chapter"
-        shortcut: "Down"
+        shortcut: window.playerKey("Down")
         enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.navigateChapter(1)
     }
     Action {
         id: backAction
         text: "&Back 10 Seconds"
-        shortcut: "Left"
+        shortcut: window.playerKey("Left")
         enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.skip(-10)
     }
     Action {
         id: forwardAction
         text: "&Forward 10 Seconds"
-        shortcut: "Right"
+        shortcut: window.playerKey("Right")
         enabled: window.player.loaded && !window.transportBlocked
         onTriggered: window.player.skip(10)
     }
@@ -192,7 +209,7 @@ ApplicationWindow {
     Action {
         id: closeAction
         text: "&Close Window"
-        shortcut: StandardKey.Close
+        shortcut: window.playerKey(StandardKey.Close)
         onTriggered: window.close()
     }
     Action {
@@ -344,14 +361,14 @@ ApplicationWindow {
         Menu {
             title: "&Playback"
             width: Math.min(window.width - 16, 360)
-            MenuCommand { action: playAction }
-            MenuCommand { action: stopAction }
+            MenuCommand { action: playAction; keyHint: "Space" }
+            MenuCommand { action: stopAction; keyHint: "Esc" }
             MenuSeparator {}
-            MenuCommand { action: backAction }
-            MenuCommand { action: forwardAction }
+            MenuCommand { action: backAction; keyHint: "Left" }
+            MenuCommand { action: forwardAction; keyHint: "Right" }
             MenuSeparator {}
-            MenuCommand { action: previousAction }
-            MenuCommand { action: nextAction }
+            MenuCommand { action: previousAction; keyHint: "Up" }
+            MenuCommand { action: nextAction; keyHint: "Down" }
             MenuCommand { action: chaptersAction }
             MenuCommand { action: stopAfterAction }
             MenuSeparator {}

@@ -400,6 +400,68 @@ private slots:
         QTest::keyClick(window, Qt::Key_F1);
         QTRY_VERIFY(help->isVisible());
     }
+    void escapeClosesTheEqualizerWithoutStopping()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        AppPreferences preferences(directory.filePath("settings.ini"));
+        player.openLocalPath(QString(SOURCE_DIR) + "/tests/fixtures/captions.m4b");
+        QTRY_VERIFY(player.notesAvailable());
+        QQmlEngine engine;
+        engine.addImageProvider("transport", new TransportIconProvider);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString(SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"player", QVariant::fromValue(&player)}, {"preferences", QVariant::fromValue(&preferences)}}));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        window->show(); window->requestActivate();
+        QTest::qWait(100);
+        player.seek(1);
+        auto *equalizer = root->findChild<QQuickWindow *>("equalizerWindow");
+        QVERIFY(equalizer);
+        QTest::keyClick(window, Qt::Key_E, Qt::ControlModifier);
+        QTRY_VERIFY(equalizer->isVisible());
+        QTRY_VERIFY(equalizer->isActive());
+        // Bare keys belong to the focused panel, not to playback.
+        QTest::keyClick(equalizer, Qt::Key_Space);
+        QTest::keyClick(equalizer, Qt::Key_Right);
+        QTest::qWait(100);
+        QVERIFY(!player.playing());
+        QVERIFY(std::abs(player.position() - 1.0) < 0.05);
+        QTest::keyClick(equalizer, Qt::Key_Escape);
+        QTRY_VERIFY(!equalizer->isVisible());
+        QVERIFY(std::abs(player.position() - 1.0) < 0.05); // Escape did not also stop playback
+        // Ctrl shortcuts still reach the player from the panel; Ctrl+W closes only the panel.
+        window->requestActivate();
+        QTRY_VERIFY(window->isActive());
+        QTest::keyClick(window, Qt::Key_E, Qt::ControlModifier);
+        QTRY_VERIFY(equalizer->isActive());
+        QTest::keyClick(equalizer, Qt::Key_Down, Qt::ControlModifier);
+        QTRY_COMPARE(player.volume(), 95.0);
+        QTest::keyClick(equalizer, Qt::Key_W, Qt::ControlModifier);
+        QTRY_VERIFY(!equalizer->isVisible());
+        QVERIFY(window->isVisible());
+        // Settings with a book loaded: arrows adjust the focused control, not playback.
+        auto *settings = root->findChild<QQuickWindow *>("settingsWindow");
+        window->requestActivate();
+        QTRY_VERIFY(window->isActive());
+        QTest::keyClick(window, Qt::Key_Comma, Qt::ControlModifier);
+        QTRY_VERIFY(settings->isActive());
+        QTest::keyClick(settings, Qt::Key_Down);
+        QTest::keyClick(settings, Qt::Key_Space);
+        QTest::qWait(100);
+        QCOMPARE(player.currentChapter(), 0);
+        QVERIFY(!player.playing());
+        QTest::keyClick(settings, Qt::Key_Escape);
+        QTRY_VERIFY(!settings->isVisible());
+        // Back in the player, the single keys work again.
+        window->requestActivate();
+        QTRY_VERIFY(window->isActive());
+        QTest::keyClick(window, Qt::Key_Down);
+        QTRY_COMPARE(player.currentChapter(), 1);
+    }
     void notesKeyboardCancelSaveAndFailureKeepDraft()
     {
         QTemporaryDir directory;
