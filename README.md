@@ -113,6 +113,8 @@ playback while a popup, Notes or Info has the keyboard; Escape then closes the p
 Chapters, rating/notes, playback speed and volume open above their buttons with
 matching dimming and active-button highlights.
 
+- Scroll over the speed button (`1×`) to step through the preset speeds: up is
+  faster, down is slower.
 - Escape or an outside click dismisses a popup.
 - Up/Down and Enter select a chapter or speed; long lists scroll to fit.
 - Rating and volume adjustments keep their popups open. Arrow keys adjust the

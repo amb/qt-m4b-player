@@ -42,7 +42,7 @@ ApplicationWindow {
         ] }
     ]
     readonly property var sections: [
-        { title: "Getting started", text: "Open a book with File → Open Audiobook or Open Recent. Books open paused and remember your position. Click the cover or a caption to play or pause. In Fill mode, drag the cover vertically to reframe it." },
+        { title: "Getting started", text: "Open a book with File → Open Audiobook or Open Recent. Books open paused and remember your position. Click the cover or a caption to play or pause. Scroll over the speed button to step through the speeds: up is faster, down is slower. In Fill mode, drag the cover vertically to reframe it." },
         { title: "Chapters and Stop After Chapter", text: "The slider and times cover the current chapter; the remaining time is for the whole book. Previous and Next pause and return to where you left a chapter in this session; choosing a chapter in the list starts it from the beginning. With Stop After Chapter on, playback pauses at the start of the next chapter." },
         { title: "Captions", text: "CC becomes available once embedded captions are indexed. The index is cached, so reopening a book shows them right away." },
         { title: "Notes and rating", text: "The star sets a half-star rating and opens Notes. Notes use explicit Save and Cancel; saving empty text clears the note." },

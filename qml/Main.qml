@@ -19,6 +19,16 @@ ApplicationWindow {
         const next = Math.round((window.player.speed + delta) * 100) / 100
         window.player.setSpeed(Math.max(window.minimumSpeed, Math.min(window.maximumSpeed, next)))
     }
+    // Move to the next faster (direction > 0) or slower preset; a speed between
+    // presets moves to the nearest preset in that direction.
+    function stepSpeedPreset(direction: int): void {
+        const speed = window.player.speed
+        const rates = window.playbackRates
+        const target = direction > 0 ? rates.find(rate => rate > speed + 0.001)
+                                     : rates.slice().reverse().find(rate => rate < speed - 0.001)
+        if (target !== undefined)
+            window.player.setSpeed(target)
+    }
     readonly property bool utilityPopupOpen: chapterSheet.visible || ratingPopup.visible || speedPopup.visible || volumePopup.visible
     // Separate windows and utility popups own the keyboard; transport keys must not reach playback.
     readonly property bool transportBlocked: notesEditor.visible || bookInfoWindow.visible || utilityPopupOpen
@@ -632,7 +642,33 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        TransportButton { id: speedButton; objectName: "speedButton"; text: window.player.speed + "×"; description: "Playback speed"; enabled: window.player.loaded; popupOpen: speedPopup.visible; onClicked: speedPopup.open() }
+                        TransportButton {
+                            id: speedButton
+                            objectName: "speedButton"
+                            text: window.player.speed + "×"
+                            description: "Playback speed (scroll to change)"
+                            enabled: window.player.loaded
+                            popupOpen: speedPopup.visible
+                            onClicked: speedPopup.open()
+                            // Wheel up selects the next faster preset, wheel down the next slower.
+                            // Touchpad deltas accumulate so one notch's worth moves one preset.
+                            WheelHandler {
+                                id: speedWheel
+                                property real accumulated: 0
+                                target: null
+                                enabled: window.player.loaded
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                orientation: Qt.Vertical
+                                onWheel: event => {
+                                    const step = 120
+                                    // Match Qt's sliders: natural scrolling reports inverted deltas.
+                                    accumulated += event.inverted ? -event.angleDelta.y : event.angleDelta.y
+                                    while (accumulated >= step) { window.stepSpeedPreset(1); accumulated -= step }
+                                    while (accumulated <= -step) { window.stepSpeedPreset(-1); accumulated += step }
+                                }
+                                onActiveChanged: if (!active) accumulated = 0
+                            }
+                        }
                         TransportButton { id: volumeButton; objectName: "volumeButton"; action: volumeAction; iconName: "volume"; description: "Volume"; popupOpen: volumePopup.visible }
                     }
                 }

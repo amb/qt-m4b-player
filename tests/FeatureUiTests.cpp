@@ -484,6 +484,61 @@ private slots:
         QTest::keyClick(window, Qt::Key_Down);
         QTRY_COMPARE(player.currentChapter(), 1);
     }
+    void wheelOverSpeedButtonStepsThroughPresets()
+    {
+        QTemporaryDir directory;
+        Library library(directory.filePath("library.sqlite"));
+        PlayerController player(&library, directory.filePath("covers"), true);
+        AppPreferences preferences(directory.filePath("settings.ini"));
+        player.openLocalPath(QString(SOURCE_DIR) + "/tests/fixtures/captions.m4b");
+        QTRY_VERIFY(player.notesAvailable());
+        QQmlEngine engine;
+        engine.addImageProvider("transport", new TransportIconProvider);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QString(SOURCE_DIR) + "/qml/Main.qml"));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"player", QVariant::fromValue(&player)}, {"preferences", QVariant::fromValue(&preferences)}}));
+        auto *window = qobject_cast<QQuickWindow *>(root.get());
+        QVERIFY(window);
+        window->show(); window->requestActivate();
+        QTest::qWait(100);
+        auto *button = root->findChild<QQuickItem *>("speedButton");
+        QVERIFY(button);
+        const QPointF at = button->mapToScene(button->boundingRect().center());
+        const auto wheel = [&](int dy, bool inverted = false, QPoint pixels = {}) {
+            QWheelEvent event(at, window->mapToGlobal(at.toPoint()), pixels, QPoint(0, dy), Qt::NoButton,
+                              Qt::NoModifier, Qt::NoScrollPhase, inverted);
+            QCoreApplication::sendEvent(window, &event);
+        };
+        QCOMPARE(player.speed(), 1.0);
+        wheel(120);
+        QTRY_COMPARE(player.speed(), 1.25);
+        wheel(240); // two notches at once
+        QTRY_COMPARE(player.speed(), 1.75);
+        wheel(-120);
+        QTRY_COMPARE(player.speed(), 1.5);
+        // Natural (inverted) scrolling: the same finger motion still means faster.
+        wheel(-120, true);
+        QTRY_COMPARE(player.speed(), 1.75);
+        // Touchpad-sized deltas accumulate to one preset.
+        for (int i = 0; i < 4; ++i) wheel(-30);
+        QTRY_COMPARE(player.speed(), 1.5);
+        // Clamped at the slowest preset; a speed between presets goes to the nearest one.
+        for (int i = 0; i < 12; ++i) wheel(-120);
+        QTRY_COMPARE(player.speed(), 0.5);
+        player.setSpeed(1.1);
+        QTRY_COMPARE(player.speed(), 1.1);
+        wheel(120);
+        QTRY_COMPARE(player.speed(), 1.25);
+        player.setSpeed(1.1);
+        QTRY_COMPARE(player.speed(), 1.1);
+        wheel(-120);
+        QTRY_COMPARE(player.speed(), 1.0);
+        for (int i = 0; i < 12; ++i) wheel(120);
+        QTRY_COMPARE(player.speed(), 3.0);
+        QCOMPARE(player.position(), 0.0);
+        QVERIFY(!player.playing());
+    }
     void notesKeyboardCancelSaveAndFailureKeepDraft()
     {
         QTemporaryDir directory;
