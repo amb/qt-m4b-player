@@ -253,7 +253,9 @@ integrations; the app builds against Qt without KDE development libraries.
 `build.sh` creates an optimized native release using the `linux-release` CMake
 preset. Use `./build.sh --dev` for a debug build with tests in `build/debug`
 using `linux-debug`. Both scripts work from any working directory. Build
-concurrency defaults to two jobs; override it with `CMAKE_BUILD_PARALLEL_LEVEL`.
+concurrency defaults to 16 jobs; override it with `CMAKE_BUILD_PARALLEL_LEVEL`.
+When `ccache` is installed, compiles go through it, which speeds up clean and
+repeated builds; configure with `-DQT_M4B_USE_CCACHE=OFF` to disable it.
 
 To build and install the native release, including the desktop launcher and icons:
 

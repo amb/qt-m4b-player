@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.24)
 project(qt-m4b-player VERSION 0.2.0 LANGUAGES CXX)
 
+# Reuse compiled objects across clean builds, branch switches and build trees
+# when ccache is installed. An explicit compiler launcher takes precedence.
+option(QT_M4B_USE_CCACHE "Compile through ccache when it is installed" ON)
+if(QT_M4B_USE_CCACHE AND NOT CMAKE_CXX_COMPILER_LAUNCHER)
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    endif()
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
